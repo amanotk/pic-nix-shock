@@ -1,0 +1,6 @@
+*.msgpack
+*.json
+*.data
+*.png
+*.mp4
+__pycache__
