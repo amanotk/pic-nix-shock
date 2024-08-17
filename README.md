@@ -4,7 +4,9 @@
 To merge the content of this repository with an existing directory, you can do as follows (at your own risk):
 ```
 $ git init
+$ git branch -m main
 $ git remote add origin git@github.com:amanotk/pic-nix-shock.git
 $ git fetch
 $ git merge origin/main --allow-unrelated-histories
+$ git branch --set-upstream-to=origin/main main
 ```
