@@ -96,8 +96,7 @@ def calc_shock_speed(run, step):
     t_sh = np.zeros((len(step),))
     x_sh = np.zeros((len(step),))
     for index, i in enumerate(step):
-        data = run.read_at("field", i)
-        uf = data["uf"]
+        uf = run.read_at("field", i, "uf")["uf"]
         bx = uf[..., 3].mean(axis=(0, 1)) / b0
         by = uf[..., 4].mean(axis=(0, 1)) / b0
         bz = uf[..., 5].mean(axis=(0, 1)) / b0
