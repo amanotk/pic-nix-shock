@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 import picnix
 
 
-def calc_particle_histogram(run, step, species, xbin, ubin):
+def calc_particle_histogram(run, step, species, xbin, ubin, ebin):
     name = "up{:02d}".format(species)
     particle = run.read_at("particle", step, name)[name]
     xx = particle[:, 0]
@@ -17,7 +17,10 @@ def calc_particle_histogram(run, step, species, xbin, ubin):
     xux = picnix.Histogram2D(xx, ux, xbin, ubin)
     xuy = picnix.Histogram2D(xx, uy, xbin, ubin)
     xuz = picnix.Histogram2D(xx, uz, xbin, ubin)
-    return {"xux": xux, "xuy": xuy, "xuz": xuz}
+    # energy in log scale
+    e = np.sqrt(1 + ux**2 + uy**2 + uz**2) - 1
+    xe = picnix.Histogram2D(xx, e, xbin, ebin, logy=True)
+    return {"xux": xux, "xuy": xuy, "xuz": xuz, "xe": xe}
 
 
 def calc_velocity_dist(run, step, species, xmin, xmax, **kwargs):
@@ -130,16 +133,26 @@ def summary_plot_1d(run, step, **kwargs):
 
     # calculate histogram
     xbine = kwargs.get("xbine", (0, run.Nx * run.delh, run.Nx + 1))
-    ubine = kwargs.get("ubine", (-1.0, +1.0, 81))
+    ubine = kwargs.get("ubine", (-1.5, +1.5, 81))
+    ebine = kwargs.get("ebine", np.geomspace(1.0e-3, 1.0e1, 61))
     xbini = kwargs.get("xbini", xbine)
     ubini = kwargs.get("ubini", (-3.0 * u0, +3.0 * u0, 81))
-    ele_psd = calc_particle_histogram(run, step, 0, xbine, ubine)
-    ion_psd = calc_particle_histogram(run, step, 1, xbini, ubini)
-    psd = (None, ion_psd["xux"], ion_psd["xuy"], ele_psd["xux"], ele_psd["xuy"])
-    label = (r"B", r"$u_{i,x}$", r"$u_{i,y}$", r"$u_{e,x}$", r"$u_{e,y}$")
+    ebini = kwargs.get("ebini", np.geomspace(1.0e-4, 1.0e-1, 61))
+    ele_psd = calc_particle_histogram(run, step, 0, xbine, ubine, ebine)
+    ion_psd = calc_particle_histogram(run, step, 1, xbini, ubini, ebini)
+    psd = (
+        None,
+        ion_psd["xux"],
+        ion_psd["xuy"],
+        ele_psd["xux"],
+        ele_psd["xuy"],
+        ele_psd["xe"],
+    )
+    label = (r"B", r"$u_{i,x}$", r"$u_{i,y}$", r"$u_{e,x}$", r"$u_{e,y}$", r"$K_{e}$")
+    logy = (False, False, False, False, False, True)
 
     # plot
-    fig = plt.figure(figsize=(10, 8), dpi=120)
+    fig = plt.figure(figsize=(10, 10), dpi=120)
     fig.subplots_adjust(
         top=0.95,
         bottom=0.08,
@@ -149,17 +162,19 @@ def summary_plot_1d(run, step, **kwargs):
         wspace=0.02,
     )
     gridspec = fig.add_gridspec(
-        5, 2, height_ratios=[1, 1, 1, 1, 1], width_ratios=[50, 1]
+        6, 2, height_ratios=[1, 1, 1, 1, 1, 1], width_ratios=[50, 1]
     )
-    axs = [0] * 5
-    cxs = [0] * 5
-    for i in range(5):
+    axs = [0] * 6
+    cxs = [0] * 6
+    for i in range(6):
         axs[i] = fig.add_subplot(gridspec[i, 0])
         if psd[i] is not None:
             cxs[i] = fig.add_subplot(gridspec[i, 1])
         axs[i].set_ylabel(label[i])
         axs[i].set_xlim(xbine[0], xbine[1])
         axs[i].xaxis.set_minor_locator(mpl.ticker.MultipleLocator(5))
+        if logy[i] == True:
+            axs[i].set_yscale("log")
     axs[-1].set_xlabel(r"$x / c/\omega_{pe}$")
     fig.align_ylabels(axs)
     plt.suptitle(r"$\Omega_{{ci}} t$ = {:5.2f}".format(tt))
@@ -175,7 +190,7 @@ def summary_plot_1d(run, step, **kwargs):
     plt.legend(bbox_to_anchor=(1, 1), loc="upper left")
 
     # phase space
-    for i in range(5):
+    for i in range(6):
         if psd[i] is not None:
             plot_particle_histogram(axs[i], cxs[i], psd[i])
 

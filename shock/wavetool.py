@@ -99,6 +99,7 @@ class DataReducer(JobExecutor):
 
     def save(self, filename):
         profile = self.options.get("profile", None)
+        overwrite = self.options.get("overwrite", False)
         num_average = self.options.get("num_average", 4)
         num_xwindow = self.options.get("num_xwindow", 2048)
         step_min = self.options.get("step_min", 380000)
@@ -108,7 +109,8 @@ class DataReducer(JobExecutor):
             "shock_position", [1.66365906e-02, -1.39911575e02]
         )
 
-        run = picnix.Run(profile)
+        method = self.options.get("method", "thread")
+        run = picnix.Run(profile, method=method)
         param = run.config["parameter"]
         gamma = np.sqrt(1 + param["u0"] ** 2)
         qme = -np.sqrt(gamma)
@@ -135,30 +137,40 @@ class DataReducer(JobExecutor):
         yc[0] = yc[1] - dh * num_average
         yc[-1] = yc[-2] + dh * num_average
 
-        # create HDF5 file and datasets first
-        with h5py.File(filename, "w") as fp:
-            fp.create_dataset("config", data=config, dtype=np.int8)
-            fp.create_dataset("t", (Nt,), dtype=np.float64)
-            fp.create_dataset("x", (Nt, Mx), dtype=np.float64, chunks=(1, Mx))
-            fp.create_dataset("y", (Nt, My), dtype=np.float64, chunks=(1, My))
-            fp.create_dataset(
-                "E", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3)
-            )
-            fp.create_dataset(
-                "B", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3)
-            )
-            fp.create_dataset(
-                "Je", (Nt, My, Mx, 4), dtype=np.float64, chunks=(1, My, Mx, 4)
-            )
-            fp.create_dataset(
-                "Ji", (Nt, My, Mx, 4), dtype=np.float64, chunks=(1, My, Mx, 4)
-            )
+        if not os.path.exists(filename) or overwrite == True:
+            # create HDF5 file and datasets first
+            with h5py.File(filename, "w") as fp:
+                dummpy_step = (-1) * np.ones((Nt,), np.int32)
+                fp.create_dataset("config", data=config, dtype=np.int8)
+                fp.create_dataset("step", (Nt,), data=dummpy_step, dtype=np.int32)
+                fp.create_dataset("t", (Nt,), dtype=np.float64)
+                fp.create_dataset("x", (Nt, Mx), dtype=np.float64, chunks=(1, Mx))
+                fp.create_dataset("y", (Nt, My), dtype=np.float64, chunks=(1, My))
+                fp.create_dataset(
+                    "E", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3)
+                )
+                fp.create_dataset(
+                    "B", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3)
+                )
+                fp.create_dataset(
+                    "Je", (Nt, My, Mx, 4), dtype=np.float64, chunks=(1, My, Mx, 4)
+                )
+                fp.create_dataset(
+                    "Ji", (Nt, My, Mx, 4), dtype=np.float64, chunks=(1, My, Mx, 4)
+                )
+
+        # read step
+        with h5py.File(filename, "r") as fp:
+            step_in_file = fp["step"][()]
 
         # read and process data for each step
         for i, index in enumerate(tqdm.tqdm(index_range)):
-            time = run.get_time_at("field", field_step[index])
+            # skip if the step is already stored
+            if step_in_file[i] == field_step[index]:
+                continue
 
             # read data
+            time = run.get_time_at("field", field_step[index])
             data = run.read_at("field", field_step[index])
             uf = data["uf"].mean(axis=0)
             je = data["um"].mean(axis=0)[..., 0, 0:4] * qme
@@ -172,16 +184,17 @@ class DataReducer(JobExecutor):
             # linear interpolation in x
             xmin = np.polyval(shock_position, time) + x_offset
             xnew = np.arange(Mx) * num_average * dh + xmin
-            index = xc.searchsorted(xnew)
-            delta = ((xc[index] - xnew) / (xc[index] - xc[index - 1]))[
+            xind = xc.searchsorted(xnew)
+            delta = ((xc[xind] - xnew) / (xc[xind] - xc[xind - 1]))[
                 np.newaxis, :, np.newaxis
             ]
-            uf = delta * uf[..., index - 1, :] + (1 - delta) * uf[..., index, :]
-            je = delta * je[..., index - 1, :] + (1 - delta) * je[..., index, :]
-            ji = delta * ji[..., index - 1, :] + (1 - delta) * ji[..., index, :]
+            uf = delta * uf[..., xind - 1, :] + (1 - delta) * uf[..., xind, :]
+            je = delta * je[..., xind - 1, :] + (1 - delta) * je[..., xind, :]
+            ji = delta * ji[..., xind - 1, :] + (1 - delta) * ji[..., xind, :]
 
             # store data
             with h5py.File(filename, "a") as fp:
+                fp["step"][i] = field_step[index]
                 fp["t"][i] = time
                 fp["x"][i, ...] = xnew
                 fp["y"][i, ...] = yc
