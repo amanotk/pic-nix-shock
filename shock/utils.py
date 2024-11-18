@@ -84,42 +84,40 @@ def find_overshoot(xx, bx, by, bz, dh, mime):
     return xx[index[-1]]
 
 
-def calc_shock_speed(run, step):
+def calc_shock_speed(params, steps, times, xc, bx, by, bz):
     """Calculate the shock propagation speed in the simulation frame"""
-    mime = run.config["parameter"]["mime"]
-    sigma = run.config["parameter"]["sigma"]
-    u0 = run.config["parameter"]["u0"]
-    b0 = np.sqrt(sigma) / np.sqrt(1 + u0**2)
-    xc = run.xc
-    dh = run.delh
+    mime = params["mime"]
+    delh = params["delh"]
 
-    t_sh = np.zeros((len(step),))
-    x_sh = np.zeros((len(step),))
-    for index, i in enumerate(step):
-        uf = run.read_at("field", i, "uf")["uf"]
-        bx = uf[..., 3].mean(axis=(0, 1)) / b0
-        by = uf[..., 4].mean(axis=(0, 1)) / b0
-        bz = uf[..., 5].mean(axis=(0, 1)) / b0
-        t_sh[index] = run.get_time_at("field", i)
-        x_sh[index] = find_overshoot(xc, bx, by, bz, dh, mime)
+    x_sh = np.zeros((len(steps),))
+    t_sh = np.zeros((len(steps),))
+    for index, step in enumerate(steps):
+        Bx = bx[step]
+        By = by[step]
+        Bz = bz[step]
+        x_sh[index] = find_overshoot(xc, Bx, By, Bz, delh, mime)
+        t_sh[index] = times[step]
 
     # linear fit to the shock position
     poly = np.polyfit(t_sh, x_sh, 1)
     v_sh = poly[0]
 
-    return t_sh, x_sh, poly
+    return t_sh, x_sh, v_sh, poly
 
 
-def calc_shock_potential(run, step, v_sh, nsmooth=16):
-    """Calculate the cross-shock potential in HTF and NIF"""
-    nppc = run.config["parameter"]["nppc"]
-    mime = run.config["parameter"]["mime"]
-    wp = run.config["parameter"]["wp"]
-    u0 = run.config["parameter"]["u0"]
+def calc_shock_potential(params, v_sh, vars, nsmooth=16):
+    """Calculate the cross-shock potential in HTF and NIF
+
+    The HTF potential is calculated from the equation of motion
+    for the electron fluid ignoring the temporal derivative.
+    See, Goodrich and Scudder (1984), for reference.
+    """
+    nppc = params["nppc"]
+    mime = params["mime"]
+    wp = params["wp"]
+    u0 = params["u0"]
     qe = wp / nppc * np.sqrt(1 + u0**2)
     me = 1 / nppc
-    dh = run.delh
-    xc = run.xc
 
     # normalization
     phi_norm = 0.5 * mime * (me / qe) * v_sh**2
@@ -127,39 +125,37 @@ def calc_shock_potential(run, step, v_sh, nsmooth=16):
     # smoothing
     ww = np.ones(nsmooth)
     ww /= ww.sum()
-    smooth = lambda var: signal.convolve(var.mean(axis=(0, 1)), ww, mode="same")
+    smooth = lambda var: signal.convolve(var, ww, mode="same")
 
-    data = run.read_at("field", step)
-    um = data["um"]
-    uf = data["uf"]
-    Ex = smooth(uf[..., 0])
-    Bx = smooth(uf[..., 3])
-    By = smooth(uf[..., 4])
-    Bz = smooth(uf[..., 5])
-    Ne = smooth(um[..., 0, 0]) / me
-    Vx = smooth(um[..., 0, 1]) / (me * Ne)
-    Vy = smooth(um[..., 0, 2]) / (me * Ne)
-    Vz = smooth(um[..., 0, 3]) / (me * Ne)
-    Pxx = smooth(um[..., 0, 5]) - me * Ne * Vx**2
-    Pxy = smooth(um[..., 0, 11]) - me * Ne * Vx * Vy
-    Pxz = smooth(um[..., 0, 13]) - me * Ne * Vz * Vx
+    x = vars["x"]
+    Ex = smooth(vars["Ex"])
+    Bx = smooth(vars["Bx"])
+    By = smooth(vars["By"])
+    Bz = smooth(vars["Bz"])
+    R = smooth(vars["R"])
+    Vx = smooth(vars["Vx"])
+    Vy = smooth(vars["Vy"])
+    Vz = smooth(vars["Vz"])
+    Pxx = smooth(vars["Pxx"]) - R * Vx * Vx
+    Pxy = smooth(vars["Pxy"]) - R * Vx * Vy
+    Pxz = smooth(vars["Pxz"]) - R * Vx * Vz
 
-    delx = xc[+1:] - xc[:-1]
-    xcc = 0.5 * (xc[+1:] + xc[:-1])
-    Nec = 0.5 * (Ne[+1:] + Ne[:-1])
+    dx = x[+1:] - x[:-1]
+    xc = 0.5 * (x[+1:] + x[:-1])
+    Rc = 0.5 * (R[+1:] + R[:-1])
     Vxc = 0.5 * (Vx[+1:] + Vx[:-1])
     byx = (By[+1:] + By[:-1]) / (Bx[+1:] + Bx[:-1])
     bzx = (Bz[+1:] + Bz[:-1]) / (Bx[+1:] + Bx[:-1])
-    epara_pxx = -(Pxx[+1:] - Pxx[:-1]) / delx / (qe * Nec)
-    epara_pxy = -(Pxy[+1:] - Pxy[:-1]) / delx / (qe * Nec)
-    epara_pxz = -(Pxz[+1:] - Pxz[:-1]) / delx / (qe * Nec)
-    epara_vxx = -(Vx[+1:] - Vx[:-1]) / delx * Vxc * me / qe
-    epara_vxy = -(Vy[+1:] - Vy[:-1]) / delx * Vxc * me / qe
-    epara_vxz = -(Vz[+1:] - Vz[:-1]) / delx * Vxc * me / qe
+    epara_pxx = -(Pxx[+1:] - Pxx[:-1]) / dx / Rc * me / qe
+    epara_pxy = -(Pxy[+1:] - Pxy[:-1]) / dx / Rc * me / qe
+    epara_pxz = -(Pxz[+1:] - Pxz[:-1]) / dx / Rc * me / qe
+    epara_vxx = -(Vx[+1:] - Vx[:-1]) / dx * Vxc * me / qe
+    epara_vxy = -(Vy[+1:] - Vy[:-1]) / dx * Vxc * me / qe
+    epara_vxz = -(Vz[+1:] - Vz[:-1]) / dx * Vxc * me / qe
 
-    phi_gradp = -np.cumsum(epara_pxx + byx * epara_pxy + bzx * epara_pxz) * dh
-    phi_gradv = -np.cumsum(epara_vxx + byx * epara_vxy + bzx * epara_vxz) * dh
+    phi_gradp = -np.cumsum(epara_pxx + byx * epara_pxy + bzx * epara_pxz) * dx
+    phi_gradv = -np.cumsum(epara_vxx + byx * epara_vxy + bzx * epara_vxz) * dx
     phi_htf = (phi_gradp + phi_gradv) / phi_norm
-    phi_nif = -np.cumsum(Ex)[1:] * dh / phi_norm
+    phi_nif = -np.cumsum(Ex)[1:] * dx / phi_norm
 
-    return xcc, phi_htf, phi_nif
+    return xc, phi_htf, phi_nif
