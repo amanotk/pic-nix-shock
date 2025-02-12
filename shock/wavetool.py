@@ -212,9 +212,17 @@ class SummaryPlotter(JobExecutor):
                 self.options[key] = kwargs["plot"][key]
         self.plot_dict = None
 
+    def read_parameter(self):
+        # ignore
+        return None
+
     def main(self, prefix):
         filename = self.get_filename(prefix, ".h5")
         output = self.options.get("output", "plot")
+
+        # read parameters here
+        with h5py.File(filename, "r") as fp:
+            self.parameter = pickle.loads(fp["config"][()])["parameter"]
 
         wci = np.sqrt(self.parameter["sigma"]) / self.parameter["mime"]
         png = self.get_filename(output, "")

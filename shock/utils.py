@@ -84,18 +84,33 @@ def find_overshoot(xx, bx, by, bz, dh, mime):
     return xx[index[-1]]
 
 
-def calc_shock_speed(params, steps, times, xc, bx, by, bz):
+def find_ramp(xx, yy, dh, fc):
+    """Find the ramp position of the magnetic field strength"""
+    # apply smoothing to magnetic field strength
+    fs = 1 / dh
+    filtb, filta = signal.butter(5, fc * fs, "low", fs=fs)
+    yy = signal.filtfilt(filtb, filta, yy)
+    xc = 0.5 * (xx[1:] + xx[:-1])
+    dy = -np.diff(yy, n=1) / np.diff(xx)
+    # find the ramp position as the peak
+    return xc[np.argmax(dy)]
+
+
+def calc_shock_speed(params, steps, times, xc, var, fc=0.1):
     """Calculate the shock propagation speed in the simulation frame"""
-    mime = params["mime"]
     delh = params["delh"]
+
+    if var.ndim == 2:
+        # scalar (such as density)
+        yy = var
+    elif var.ndim == 3:
+        # vector (such as magnetic field)
+        yy = np.sqrt(var[..., 0] ** 2 + var[..., 1] ** 2 + var[..., 2] ** 2)
 
     x_sh = np.zeros((len(steps),))
     t_sh = np.zeros((len(steps),))
     for index, step in enumerate(steps):
-        Bx = bx[step]
-        By = by[step]
-        Bz = bz[step]
-        x_sh[index] = find_overshoot(xc, Bx, By, Bz, delh, mime)
+        x_sh[index] = find_ramp(xc, yy[step], delh, fc)
         t_sh[index] = times[step]
 
     # linear fit to the shock position
