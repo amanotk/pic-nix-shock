@@ -92,8 +92,10 @@ def find_ramp(xx, yy, dh, fc):
     yy = signal.filtfilt(filtb, filta, yy)
     xc = 0.5 * (xx[1:] + xx[:-1])
     dy = -np.diff(yy, n=1) / np.diff(xx)
-    # find the ramp position as the peak
-    return xc[np.argmax(dy)]
+    dy = dy / np.abs(dy).max()  # normalize
+    index, _ = signal.find_peaks(dy, prominence=0.5, distance=100)
+    # find the ramp position as the right-most peak
+    return xc[index[-1]]
 
 
 def calc_shock_speed(params, steps, times, xc, var, fc=0.1):
@@ -133,44 +135,47 @@ def calc_shock_potential(params, v_sh, vars, nsmooth=16):
     u0 = params["u0"]
     qe = wp / nppc * np.sqrt(1 + u0**2)
     me = 1 / nppc
+    mq = me / qe
 
     # normalization
-    phi_norm = 0.5 * mime * (me / qe) * v_sh**2
+    phi_norm = 0.5 * mime * mq * v_sh**2
 
     # smoothing
     ww = np.ones(nsmooth)
     ww /= ww.sum()
-    smooth = lambda var: signal.convolve(var, ww, mode="same")
+    smooth = lambda var: np.apply_along_axis(
+        lambda m: np.convolve(m, ww, mode="same"), axis=0, arr=var
+    )
 
     x = vars["x"]
-    Ex = smooth(vars["Ex"])
-    Bx = smooth(vars["Bx"])
-    By = smooth(vars["By"])
-    Bz = smooth(vars["Bz"])
-    R = smooth(vars["R"])
-    Vx = smooth(vars["Vx"])
-    Vy = smooth(vars["Vy"])
-    Vz = smooth(vars["Vz"])
-    Pxx = smooth(vars["Pxx"]) - R * Vx * Vx
-    Pxy = smooth(vars["Pxy"]) - R * Vx * Vy
-    Pxz = smooth(vars["Pxz"]) - R * Vx * Vz
+    E = smooth(vars["E"])
+    B = smooth(vars["B"])
+    Re = smooth(vars["Re"])
+    Ve = smooth(vars["Ve"])
+    Pe = smooth(vars["Pe"])
 
+    Vx = Ve[..., 0]
+    Vy = Ve[..., 1]
+    Vz = Ve[..., 2]
+    Pxx = Pe[..., 0] - Re * Vx * Vx
+    Pxy = Pe[..., 3] - Re * Vx * Vy
+    Pxz = Pe[..., 5] - Re * Vx * Vz
     dx = x[+1:] - x[:-1]
     xc = 0.5 * (x[+1:] + x[:-1])
-    Rc = 0.5 * (R[+1:] + R[:-1])
-    Vxc = 0.5 * (Vx[+1:] + Vx[:-1])
-    byx = (By[+1:] + By[:-1]) / (Bx[+1:] + Bx[:-1])
-    bzx = (Bz[+1:] + Bz[:-1]) / (Bx[+1:] + Bx[:-1])
-    epara_pxx = -(Pxx[+1:] - Pxx[:-1]) / dx / Rc * me / qe
-    epara_pxy = -(Pxy[+1:] - Pxy[:-1]) / dx / Rc * me / qe
-    epara_pxz = -(Pxz[+1:] - Pxz[:-1]) / dx / Rc * me / qe
-    epara_vxx = -(Vx[+1:] - Vx[:-1]) / dx * Vxc * me / qe
-    epara_vxy = -(Vy[+1:] - Vy[:-1]) / dx * Vxc * me / qe
-    epara_vxz = -(Vz[+1:] - Vz[:-1]) / dx * Vxc * me / qe
+    Rc = 0.5 * (Re[+1:] + Re[:-1])
+    Vc = 0.5 * (Vx[+1:] + Vx[:-1])
+    byx = (B[+1:, 1] + B[:-1, 1]) / (B[+1:, 0] + B[:-1, 0])
+    bzx = (B[+1:, 2] + B[:-1, 2]) / (B[+1:, 0] + B[:-1, 0])
+    epara_pxx = -(Pxx[+1:] - Pxx[:-1]) / dx / Rc * mq
+    epara_pxy = -(Pxy[+1:] - Pxy[:-1]) / dx / Rc * mq
+    epara_pxz = -(Pxz[+1:] - Pxz[:-1]) / dx / Rc * mq
+    epara_vxx = -(Vx[+1:] - Vx[:-1]) / dx * Vc * mq
+    epara_vxy = -(Vy[+1:] - Vy[:-1]) / dx * Vc * mq
+    epara_vxz = -(Vz[+1:] - Vz[:-1]) / dx * Vc * mq
 
     phi_gradp = -np.cumsum(epara_pxx + byx * epara_pxy + bzx * epara_pxz) * dx
     phi_gradv = -np.cumsum(epara_vxx + byx * epara_vxy + bzx * epara_vxz) * dx
     phi_htf = (phi_gradp + phi_gradv) / phi_norm
-    phi_nif = -np.cumsum(Ex)[1:] * dx / phi_norm
+    phi_nif = -np.cumsum(E[..., 0])[1:] * dx / phi_norm
 
     return xc, phi_htf, phi_nif
