@@ -3,4 +3,5 @@
 *.data
 *.png
 *.mp4
+*.h5
 __pycache__
