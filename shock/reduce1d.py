@@ -23,7 +23,11 @@ plt.rcParams.update({"font.size": 12})
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 import picnix
-import utils
+
+try:
+    from . import utils
+except ImportError:
+    import utils
 
 
 def get_colorbar_position_next(ax, pad=0.05):
@@ -47,13 +51,32 @@ def get_vlim(vars, vmag=100):
 
 
 class JobExecutor:
-    def __init__(self, **kwargs):
-        self.options = dict()
-        for key in kwargs:
-            if not isinstance(kwargs[key], dict):
-                self.options[key] = kwargs[key]
-        # read parameter from profile
+    def __init__(self, config_file):
+        self.config_file = config_file
+        self.options = self.read_config()
         self.parameter = self.read_parameter()
+
+    def read_config(self):
+        filename = self.config_file
+        if not os.path.exists(filename):
+            raise FileNotFoundError(f"Configuration file not found: {filename}")
+
+        if filename.endswith(".toml"):
+            with open(filename, "r") as fileobj:
+                config = toml.load(fileobj)
+        elif filename.endswith(".json"):
+            with open(filename, "r") as fileobj:
+                config = json.load(fileobj)
+        else:
+            raise ValueError("Unsupported configuration file format")
+
+        # Resolve profile path relative to config file
+        if "profile" in config:
+            config_dir = os.path.dirname(os.path.abspath(filename))
+            profile_path = os.path.join(config_dir, config["profile"])
+            config["profile"] = os.path.normpath(profile_path)
+
+        return config
 
     def read_parameter(self):
         # read parameter from profile
@@ -78,11 +101,11 @@ class JobExecutor:
 
 
 class DataReducer(JobExecutor):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if "reduce" in kwargs:
-            for key in kwargs["reduce"]:
-                self.options[key] = kwargs["reduce"][key]
+    def __init__(self, config_file):
+        super().__init__(config_file)
+        if "reduce" in self.options:
+            for key in self.options["reduce"]:
+                self.options[key] = self.options["reduce"][key]
 
     def main(self, prefix):
         self.save(self.get_filename(prefix, ".h5"))
@@ -253,27 +276,81 @@ class DataReducer(JobExecutor):
 
 
 class DataPlotter(JobExecutor):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if "plot" in kwargs:
-            for key in kwargs["plot"]:
-                self.options[key] = kwargs["plot"][key]
+    def __init__(self, config_file):
+        super().__init__(config_file)
+        if "plot" in self.options:
+            for key in self.options["plot"]:
+                self.options[key] = self.options["plot"][key]
+        self.plot_dict = None
+
+    def main(self, prefix):
+        filename = self.get_filename(prefix, ".h5")
+        output = self.options.get("output", "plot")
+        outpath = os.sep.join([self.get_dirname(), output])
+
+        poly_sh = self.get_shock_poly_fit(filename)
+        print("Shock speed polynomial fit:", poly_sh)
+
+        with h5py.File(filename, "r") as fp:
+            # read common parameters once
+            config = pickle.loads(fp["config"][()])
+            xbine = fp["xbine"][()]
+            ubine = fp["ubine"][()]
+            ebine = fp["ebine"][()]
+            step = fp["step"][()]
+            t = fp["t"][()]
+            x = fp["x"][()]
+            xbinc = 0.5 * (xbine[1:] + xbine[:-1])
+            ebinc = 0.5 * (ebine[1:] + ebine[:-1])
+            mime = config["parameter"]["mime"]
+            sigma = config["parameter"]["sigma"]
+            u0 = config["parameter"]["u0"]
+
+            # normalization factors
+            b0 = np.sqrt(sigma) / np.sqrt(1 + u0**2)
+            vae = np.sqrt(sigma)
+            vai = vae / np.sqrt(mime)
+
+            # make plots
+            wci = np.sqrt(sigma) / mime
+            for i in tqdm.tqdm(range(step.shape[0])):
+                params = {
+                    "xbine": xbine,
+                    "ubine": ubine,
+                    "ebine": ebine,
+                    "ebinc": ebinc,
+                    "x": x,
+                    "B": fp["B"][i] / b0,
+                    "Vi": fp["Vi"][i] / vai,
+                    "fuy": fp["Feu"][i, ..., 1],
+                    "f_ene": fp["Feu"][i, ..., 3],
+                    "xbinc": xbinc,
+                }
+                pngfile = "{:s}-{:08d}".format(outpath, step[i])
+                wci_time = wci * t[i]
+                x_shock = np.polyval(poly_sh, t[i])
+                self.plot(x_shock, wci_time, params)
+                self.save(pngfile)
+
+        # convert to mp4
+        fps = self.options.get("fps", 10)
+        picnix.convert_to_mp4("{:s}".format(outpath), fps, False)
 
     def get_shock_poly_fit(self, filename, fit_steps=None):
         with h5py.File(filename, "r") as fp:
             config = pickle.loads(fp["config"][()])
+            t = fp["t"][()]
             x = fp["x"][()]
             B = fp["B"][()]
-            t_arr = fp["t"][()]
             if fit_steps is None:
-                fit_steps = np.arange(0, t_arr.size)
+                fit_steps = np.arange(0, t.size)
             params = config["parameter"]
             bx = B[..., 0]
             by = B[..., 1]
             bz = B[..., 2]
             bb = np.sqrt(bx**2 + by**2 + bz**2)
             t_sh, x_sh, v_sh, poly_sh = utils.calc_shock_speed(
-                params, fit_steps, t_arr, x, bb, 0.01
+                params, fit_steps, t, x, bb, 0.01
             )
         return poly_sh
 
@@ -293,8 +370,8 @@ class DataPlotter(JobExecutor):
         X, Y = np.broadcast_arrays(x[:, None], y[None, :])
         return X, Y
 
-    def plot(self, idx, poly_sh, png, params):
-        # get only step-dependent data
+    def plot(self, x_shock, wci_t, params):
+        # update or create plot_dict for current frame
         x = params["x"]
         B = params["B"]
         Vi = params["Vi"]
@@ -303,129 +380,161 @@ class DataPlotter(JobExecutor):
         xbine = params["xbine"]
         ubine = params["ubine"]
         ebine = params["ebine"]
-        step_arr = params["step_arr"]
-        t_arr = params["t_arr"]
 
-        mime = params["mime"]
-        sigma = params["sigma"]
-        vae = np.sqrt(sigma)
-        vai = vae / np.sqrt(mime)
-        wci = np.sqrt(sigma) / mime
-        u0 = params["u0"]
-        b0 = np.sqrt(sigma) / np.sqrt(1 + u0**2)
-        x_shock = np.polyval(poly_sh, t_arr[idx])
-
-        # get per-step energy distribution and momentum spectrum
-        f_ene_step = params["f_ene"][idx]
+        # calculate per-step energy distribution and momentum spectrum
+        f_ene_step = params["f_ene"]
         pbinc, f_mom = self.convert_to_momentum_spectrum(params["ebinc"], f_ene_step)
         pbine = np.sqrt((ebine + 1) ** 2 - 1)
+        fp4 = f_mom * pbinc[np.newaxis, :] ** 4
 
-        fig, axs = plt.subplots(5, 1, figsize=(8, 12), sharex=True)
-        plt.sca(axs[0])
-        plt.plot(x, B[idx, :, 0] / b0, "k-", label="Bx")
-        plt.plot(x, B[idx, :, 1] / b0, "r-", label="By")
-        plt.plot(x, B[idx, :, 2] / b0, "b-", label="Bz")
-        plt.ylabel(r"$B / B_0$")
-        plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+        if self.plot_dict is None:
+            # create new figure and axes
+            self.plot_dict = self.plot_new(
+                x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4
+            )
+        else:
+            # update existing figure and axes
+            self.plot_dict = self.plot_update(
+                x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4
+            )
 
-        plt.sca(axs[1])
-        plt.plot(x, Vi[idx, :, 0] / vai, "k-", label="Vx")
-        plt.plot(x, Vi[idx, :, 1] / vai, "r-", label="Vy")
-        plt.plot(x, Vi[idx, :, 2] / vai, "b-", label="Vz")
-        plt.ylabel(r"$V / V_{A,i}$")
-        plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+        # update xrange and title
+        self.plot_dict["axs"][-1].set_xlim(x_shock - 200, x_shock + 200)
+        plt.suptitle(r"$\Omega_{{ci}} t$ = {:.2f}".format(wci_t))
 
-        plt.sca(axs[2])
+    def plot_new(self, x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4):
+        # create figure and axes for the first frame
+        fig, axs = plt.subplots(5, 1, figsize=(10, 10), sharex=True)
+        fig.subplots_adjust(hspace=0.2, right=0.8, left=0.1, top=0.95, bottom=0.05)
+        # plot B field
+        axs[0].plot(x, B[:, 0], "k-", label="Bx")
+        axs[0].plot(x, B[:, 1], "r-", label="By")
+        axs[0].plot(x, B[:, 2], "b-", label="Bz")
+        axs[0].set_ylabel(r"$B / B_0$")
+        axs[0].legend(loc="upper left", bbox_to_anchor=(1, 1))
+        # plot Vi
+        axs[1].plot(x, Vi[:, 0], "k-", label="Vx")
+        axs[1].plot(x, Vi[:, 1], "r-", label="Vy")
+        axs[1].plot(x, Vi[:, 2], "b-", label="Vz")
+        axs[1].set_ylabel(r"$V_{i} / V_{A,i}$")
+        axs[1].legend(loc="upper left", bbox_to_anchor=(1, 1))
+        # plot fuy
         X, Y = self.pcolormesh_args(xbine, ubine)
-        plt.pcolormesh(X, Y, fuy[idx], shading="nearest", norm=mpl.colors.LogNorm())
-        plt.ylabel(r"$u_y$")
-
-        plt.sca(axs[3])
-        X, Y = self.pcolormesh_args(xbine, pbine)
-        plt.pcolormesh(
-            X,
-            Y,
-            f_mom * Y**4,
-            shading="nearest",
-            norm=mpl.colors.LogNorm(),
+        img2 = axs[2].pcolormesh(
+            X, Y, fuy, shading="nearest", norm=mpl.colors.LogNorm()
         )
-        plt.ylabel(r"$p^4 f(p)$")
-        plt.semilogy()
+        axs[2].set_ylabel(r"$u_y / c$")
+        # add colorbar for fuy using get_colorbar_position_next
+        cax2 = fig.add_axes(get_colorbar_position_next(axs[2], pad=0.025))
+        plt.colorbar(img2, cax=cax2)
+        cax2.set_ylabel(r"$f(u_y)$  [arb. unit]")
 
-        plt.sca(axs[4])
+        # plot fp4
+        X, Y = self.pcolormesh_args(xbine, pbine)
+        img3 = axs[3].pcolormesh(
+            X, Y, fp4, shading="nearest", norm=mpl.colors.LogNorm()
+        )
+        axs[3].set_ylabel(r"$p / m_e c$")
+        axs[3].semilogy()
+        # add colorbar for fp4 using get_colorbar_position_next
+        cax3 = fig.add_axes(get_colorbar_position_next(axs[3], pad=0.025))
+        plt.colorbar(img3, cax=cax3)
+        cax3.set_ylabel(r"$p^4 f(p)$  [arb. unit]")
+
+        # plot spectrum
         psample = [0.6, 0.7, 0.8, 0.9, 1.0]
         pindex = np.searchsorted(pbine, psample)
         for i in range(len(psample)):
-            f_norm = f_mom[:, pindex[i]] / np.max(f_mom[:, pindex[i]])
-            plt.plot(
+            f_norm = fp4[:, pindex[i]] / np.max(fp4[:, pindex[i]])
+            axs[4].plot(
                 xbinc,
                 f_norm * 10 ** (-i),
                 label=r"$p/m_e c = {:.1f}$".format(psample[i]),
             )
-        plt.ylabel(r"$f(p)$ [arb. unit]")
-        plt.semilogy()
-        plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
-        plt.ylim(1.0e-6, 1.0e1)
-        plt.xlim(max(x_shock - 200, 0), x_shock + 200)
+        axs[4].set_ylabel(r"$f(p)$ [arb. unit]")
+        axs[4].semilogy()
+        axs[4].legend(loc="upper left", bbox_to_anchor=(1, 1))
+        axs[4].set_ylim(1.0e-6, 1.0e1)
+        axs[4].set_xlabel(r"$x / c / \omega_{pe}$")
         for ax in axs:
             ax.grid(True)
         fig.align_ylabels(axs)
-        step = step_arr[idx]
-        time = t_arr[idx]
-        plt.suptitle(r"$\Omega_{{ci}} t$ = {:.2f}".format(wci * time))
-        plt.tight_layout()
-        plt.savefig(png)
-        plt.close(fig)
+        return {
+            "fig": fig,
+            "axs": axs,
+            "img2": img2,
+            "img3": img3,
+            "cax2": cax2,
+            "cax3": cax3,
+        }
 
-    def main(self, prefix):
-        filename = self.get_filename(prefix, ".h5")
-        output = self.options.get("output", "plot")
-        png = os.sep.join([self.get_dirname(), output])
+    def plot_update(self, x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4):
+        # update figure and axes for subsequent frames
+        fig = self.plot_dict["fig"]
+        axs = self.plot_dict["axs"]
+        img2 = self.plot_dict["img2"]
+        img3 = self.plot_dict["img3"]
+        # clear each axes before re-plotting
+        for ax in axs:
+            ax.cla()
+        # plot B field
+        axs[0].plot(x, B[:, 0], "k-", label="Bx")
+        axs[0].plot(x, B[:, 1], "r-", label="By")
+        axs[0].plot(x, B[:, 2], "b-", label="Bz")
+        axs[0].set_ylabel(r"$B / B_0$")
+        axs[0].legend(loc="upper left", bbox_to_anchor=(1, 1))
+        # plot Vi
+        axs[1].plot(x, Vi[:, 0], "k-", label="Vx")
+        axs[1].plot(x, Vi[:, 1], "r-", label="Vy")
+        axs[1].plot(x, Vi[:, 2], "b-", label="Vz")
+        axs[1].set_ylabel(r"$V_{i} / V_{A,i}$")
+        axs[1].legend(loc="upper left", bbox_to_anchor=(1, 1))
+        # plot fuy
+        X, Y = self.pcolormesh_args(xbine, ubine)
+        img2 = axs[2].pcolormesh(
+            X, Y, fuy, shading="nearest", norm=mpl.colors.LogNorm()
+        )
+        axs[2].set_ylabel(r"$u_y / c$")
+        # plot fp4
+        X, Y = self.pcolormesh_args(xbine, pbine)
+        img3 = axs[3].pcolormesh(
+            X, Y, fp4, shading="nearest", norm=mpl.colors.LogNorm()
+        )
+        axs[3].set_ylabel(r"$p / m_e c$")
+        axs[3].semilogy()
+        # plot spectrum
+        psample = [0.6, 0.7, 0.8, 0.9, 1.0]
+        pindex = np.searchsorted(pbine, psample)
+        for i in range(len(psample)):
+            f_norm = fp4[:, pindex[i]] / np.max(fp4[:, pindex[i]])
+            axs[4].plot(
+                xbinc,
+                f_norm * 10 ** (-i),
+                label=r"$p/m_e c = {:.1f}$".format(psample[i]),
+            )
+        axs[4].set_ylabel(r"$f(p)$ [arb. unit]")
+        axs[4].semilogy()
+        axs[4].legend(loc="upper left", bbox_to_anchor=(1, 1))
+        axs[4].set_ylim(1.0e-6, 1.0e1)
+        axs[4].set_xlabel(r"$x / c / \omega_{pe}$")
+        for ax in axs:
+            ax.grid(True)
+        fig.align_ylabels(axs)
+        return {
+            "fig": fig,
+            "axs": axs,
+            "img2": img2,
+            "img3": img3,
+            "cax2": self.plot_dict["cax2"],
+            "cax3": self.plot_dict["cax3"],
+        }
 
-        poly_sh = self.get_shock_poly_fit(filename)
-        print("Shock speed polynomial fit:", poly_sh)
-
-        with h5py.File(filename, "r") as fp:
-            # read common parameters once
-            config = pickle.loads(fp["config"][()])
-            xbine = fp["xbine"][()]
-            ubine = fp["ubine"][()]
-            ebine = fp["ebine"][()]
-            x = fp["x"][()]
-            B = fp["B"][()]
-            Vi = fp["Vi"][()]
-            fuy = fp["Feu"][..., 1]
-            f_ene = fp["Feu"][..., 3]
-            xbinc = 0.5 * (xbine[1:] + xbine[:-1])
-            ebinc = 0.5 * (ebine[1:] + ebine[:-1])
-            step_arr = fp["step"][()]
-            t_arr = fp["t"][()]
-            params = {
-                "config": config,
-                "xbine": xbine,
-                "ubine": ubine,
-                "ebine": ebine,
-                "ebinc": ebinc,
-                "x": x,
-                "B": B,
-                "Vi": Vi,
-                "fuy": fuy,
-                "f_ene": f_ene,
-                "xbinc": xbinc,
-                "step_arr": step_arr,
-                "t_arr": t_arr,
-                "mime": config["parameter"]["mime"],
-                "sigma": config["parameter"]["sigma"],
-                "u0": config["parameter"]["u0"],
-            }
-            # make plots
-            for i in range(B.shape[0]):
-                self.plot(i, poly_sh, png + "-{:08d}.png".format(i), params)
-                print("Plot saved to:", png + "-{:08d}.png".format(i))
-
-        # convert to mp4
-        fps = self.options.get("fps", 10)
-        picnix.convert_to_mp4("{:s}".format(png), fps, False)
+    def save(self, filename):
+        # save the current figure to a PNG file
+        if self.plot_dict is not None and "fig" in self.plot_dict:
+            self.plot_dict["fig"].savefig(filename)
+        else:
+            print("no plot to save")
 
 
 if __name__ == "__main__":
@@ -455,21 +564,11 @@ if __name__ == "__main__":
     if not os.path.exists(filename):
         print("Configuration file not found")
         sys.exit(1)
-    else:
-        if filename.endswith(".toml"):
-            with open(filename, "r") as fileobj:
-                config = toml.load(fileobj)
-        elif filename.endswith(".json"):
-            with open(filename, "r") as fileobj:
-                config = json.load(fileobj)
-        else:
-            print("Unsupported configuration file")
-            sys.exit(1)
 
     # perform the job
     if args.job == "reduce":
-        obj = DataReducer(**config)
+        obj = DataReducer(filename)
         obj.main(args.prefix)
     elif args.job == "plot":
-        obj = DataPlotter(**config)
+        obj = DataPlotter(filename)
         obj.main(args.prefix)

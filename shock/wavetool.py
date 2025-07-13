@@ -24,7 +24,11 @@ plt.rcParams.update({"font.size": 12})
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 import picnix
-import utils
+
+try:
+    from . import utils
+except ImportError:
+    import utils
 
 
 def get_colorbar_position_next(ax, pad=0.05):
@@ -48,13 +52,32 @@ def get_vlim(vars, vmag=100):
 
 
 class JobExecutor:
-    def __init__(self, **kwargs):
-        self.options = dict()
-        for key in kwargs:
-            if not isinstance(kwargs[key], dict):
-                self.options[key] = kwargs[key]
-        # read parameter from profile
-        self.parameter = self.read_parameter()
+    def __init__(self, config_file):
+        self.config_file = config_file
+        self.options = self.read_config()
+        # self.parameter is initialized in subclasses if needed
+
+    def read_config(self):
+        filename = self.config_file
+        if not os.path.exists(filename):
+            raise FileNotFoundError(f"Configuration file not found: {filename}")
+
+        if filename.endswith(".toml"):
+            with open(filename, "r") as fileobj:
+                config = toml.load(fileobj)
+        elif filename.endswith(".json"):
+            with open(filename, "r") as fileobj:
+                config = json.load(fileobj)
+        else:
+            raise ValueError("Unsupported configuration file format")
+
+        # Resolve profile path relative to config file
+        if "profile" in config:
+            config_dir = os.path.dirname(os.path.abspath(filename))
+            profile_path = os.path.join(config_dir, config["profile"])
+            config["profile"] = os.path.normpath(profile_path)
+
+        return config
 
     def read_parameter(self):
         # read parameter from profile
@@ -77,11 +100,12 @@ class JobExecutor:
 
 
 class DataReducer(JobExecutor):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if "reduce" in kwargs:
-            for key in kwargs["reduce"]:
-                self.options[key] = kwargs["reduce"][key]
+    def __init__(self, config_file):
+        super().__init__(config_file)
+        if "reduce" in self.options:
+            for key in self.options["reduce"]:
+                self.options[key] = self.options["reduce"][key]
+        self.parameter = self.read_parameter()
 
     def main(self, prefix):
         self.save(self.get_filename(prefix, ".h5"))
@@ -205,12 +229,13 @@ class DataReducer(JobExecutor):
 
 
 class SummaryPlotter(JobExecutor):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if "plot" in kwargs:
-            for key in kwargs["plot"]:
-                self.options[key] = kwargs["plot"][key]
+    def __init__(self, config_file):
+        super().__init__(config_file)
+        if "plot" in self.options:
+            for key in self.options["plot"]:
+                self.options[key] = self.options["plot"][key]
         self.plot_dict = None
+        self.parameter = None  # initialized later
 
     def read_parameter(self):
         # ignore
@@ -421,28 +446,11 @@ if __name__ == "__main__":
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
 
-    # read configuration file in TOML or JSON format
-    filename = args.config[0]
-
-    if not os.path.exists(filename):
-        print("Configuration file not found")
-        sys.exit(1)
-    else:
-        if filename.endswith(".toml"):
-            with open(filename, "r") as fileobj:
-                config = toml.load(fileobj)
-        elif filename.endswith(".json"):
-            with open(filename, "r") as fileobj:
-                config = json.load(fileobj)
-        else:
-            print("Unsupported configuration file")
-            sys.exit(1)
-
     # perform the job
     if args.job == "reduce":
-        obj = DataReducer(**config)
+        obj = DataReducer(args.config[0])
         obj.main(args.prefix)
 
     if args.job == "plot":
-        obj = SummaryPlotter(**config)
+        obj = SummaryPlotter(args.config[0])
         obj.main(args.prefix)
