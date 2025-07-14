@@ -212,11 +212,6 @@ class DataReducer(JobExecutor):
             if step_in_file[i] == common_step[index]:
                 continue
 
-            # time and step
-            with h5py.File(filename, "a") as fp:
-                fp["t"][i] = run.get_time_at("field", common_step[index])
-                fp["step"][i] = common_step[index]
-
             # particle
             with h5py.File(filename, "a") as fp:
                 data = run.read_at("particle", common_step[index])
@@ -273,6 +268,11 @@ class DataReducer(JobExecutor):
                     fp["P" + name][i, ..., 3] = Pxy
                     fp["P" + name][i, ..., 4] = Pyz
                     fp["P" + name][i, ..., 5] = Pzx
+
+            # time and step; do this last to ensure all data is written
+            with h5py.File(filename, "a") as fp:
+                fp["t"][i] = run.get_time_at("field", common_step[index])
+                fp["step"][i] = common_step[index]
 
 
 class DataPlotter(JobExecutor):
