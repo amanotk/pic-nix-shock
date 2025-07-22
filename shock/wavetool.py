@@ -86,16 +86,16 @@ class JobExecutor:
             parameter = obj["configuration"]["parameter"]
         return parameter
 
-    def get_filename(self, prefix, ext):
+    def get_filename(self, basename, ext):
         dirname = self.options.get("dirname", None)
         if dirname is None:
             raise ValueError("dirname is not specified")
         elif not os.path.exists(dirname):
             os.makedirs(dirname)
 
-        return os.sep.join([dirname, prefix + ext])
+        return os.sep.join([dirname, basename + ext])
 
-    def main(self, prefix):
+    def main(self, basename):
         raise NotImplementedError
 
 
@@ -107,8 +107,8 @@ class DataReducer(JobExecutor):
                 self.options[key] = self.options["reduce"][key]
         self.parameter = self.read_parameter()
 
-    def main(self, prefix):
-        self.save(self.get_filename(prefix, ".h5"))
+    def main(self, basename):
+        self.save(self.get_filename(basename, ".h5"))
 
     def average1d(self, x, size):
         x = ndimage.uniform_filter(x, size=size, axes=(0,), mode="wrap")
@@ -123,6 +123,8 @@ class DataReducer(JobExecutor):
 
     def save(self, filename):
         profile = self.options.get("profile", None)
+        config = self.options.get("config", None)
+        prefix = self.options.get("prefix", "field")
         overwrite = self.options.get("overwrite", False)
         num_average = self.options.get("num_average", 4)
         num_xwindow = self.options.get("num_xwindow", 2048)
@@ -134,14 +136,14 @@ class DataReducer(JobExecutor):
         )
 
         method = self.options.get("method", "thread")
-        run = picnix.Run(profile, method=method)
+        run = picnix.Run(profile, config=config, method=method)
         param = run.config["parameter"]
         gamma = np.sqrt(1 + param["u0"] ** 2)
         qme = -np.sqrt(gamma)
         qmi = +np.sqrt(gamma) / param["mime"]
         config = self.encode(run.config)
 
-        field_step = run.get_step("field")
+        field_step = run.get_step(prefix)
         index_min = np.searchsorted(field_step, step_min)
         index_end = np.searchsorted(field_step, step_max)
         index_range = np.arange(index_min, index_end + 1)
@@ -194,8 +196,8 @@ class DataReducer(JobExecutor):
                 continue
 
             # read data
-            time = run.get_time_at("field", field_step[index])
-            data = run.read_at("field", field_step[index])
+            time = run.get_time_at(prefix, field_step[index])
+            data = run.read_at(prefix, field_step[index])
             uf = data["uf"].mean(axis=0)
             je = data["um"].mean(axis=0)[..., 0, 0:4] * qme
             ji = data["um"].mean(axis=0)[..., 1, 0:4] * qmi
@@ -241,8 +243,8 @@ class SummaryPlotter(JobExecutor):
         # ignore
         return None
 
-    def main(self, prefix):
-        filename = self.get_filename(prefix, ".h5")
+    def main(self, basename):
+        filename = self.get_filename(basename, ".h5")
         output = self.options.get("output", "plot")
 
         # read parameters here
@@ -431,10 +433,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Quicklook Script")
     parser.add_argument(
         "-p",
-        "--prefix",
+        "--basename",
         type=str,
         default="wavetool",
-        help="Prefix used for output image and movie files",
+        help="basename used for output image and movie files",
     )
     parser.add_argument(
         "-j",
@@ -449,8 +451,8 @@ if __name__ == "__main__":
     # perform the job
     if args.job == "reduce":
         obj = DataReducer(args.config[0])
-        obj.main(args.prefix)
+        obj.main(args.basename)
 
     if args.job == "plot":
         obj = SummaryPlotter(args.config[0])
-        obj.main(args.prefix)
+        obj.main(args.basename)
