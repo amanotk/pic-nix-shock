@@ -93,10 +93,10 @@ class JobExecutor:
             os.makedirs(dirname)
         return dirname
 
-    def get_filename(self, prefix, ext):
-        return os.sep.join([self.get_dirname(), prefix + ext])
+    def get_filename(self, basename, ext):
+        return os.sep.join([self.get_dirname(), basename + ext])
 
-    def main(self, prefix):
+    def main(self, basename):
         raise NotImplementedError
 
 
@@ -107,8 +107,8 @@ class DataReducer(JobExecutor):
             for key in self.options["reduce"]:
                 self.options[key] = self.options["reduce"][key]
 
-    def main(self, prefix):
-        self.save(self.get_filename(prefix, ".h5"))
+    def main(self, basename):
+        self.save(self.get_filename(basename, ".h5"))
 
     def encode(self, data):
         return np.frombuffer(pickle.dumps(data), np.int8)
@@ -283,8 +283,8 @@ class DataPlotter(JobExecutor):
                 self.options[key] = self.options["plot"][key]
         self.plot_dict = None
 
-    def main(self, prefix):
-        filename = self.get_filename(prefix, ".h5")
+    def main(self, basename):
+        filename = self.get_filename(basename, ".h5")
         output = self.options.get("output", "plot")
         outpath = os.sep.join([self.get_dirname(), output])
 
@@ -543,10 +543,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Quicklook Script")
     parser.add_argument(
         "-p",
-        "--prefix",
+        "--basename",
         type=str,
         default="reduce1d",
-        help="Prefix used for output file",
+        help="basename used for output file",
     )
     parser.add_argument(
         "-j",
@@ -568,7 +568,7 @@ if __name__ == "__main__":
     # perform the job
     if args.job == "reduce":
         obj = DataReducer(filename)
-        obj.main(args.prefix)
+        obj.main(args.basename)
     elif args.job == "plot":
         obj = DataPlotter(filename)
-        obj.main(args.prefix)
+        obj.main(args.basename)
