@@ -179,3 +179,73 @@ def calc_shock_potential(params, v_sh, vars, nsmooth=16):
     phi_nif = -np.cumsum(E[..., 0])[1:] * dx / phi_norm
 
     return xc, phi_htf, phi_nif
+
+
+def calc_velocity_dist4d(particle, **kwargs):
+    bb = kwargs.get("bb", None)
+    vb = kwargs.get("vb", None)
+    x_bins = kwargs.get("x_bins", None)
+    y_bins = kwargs.get("y_bins", None)
+    upara_bins = kwargs.get("upara_bins", None)
+    uperp_bins = kwargs.get("uperp_bins", None)
+    uabs_bins = kwargs.get("uabs_bins", None)
+    ucos_bins = kwargs.get("ucos_bins", None)
+
+    # mask particles outside the specified region
+    xmin = x_bins.min()
+    xmax = x_bins.max()
+    delx = (xmax - xmin) / (x_bins.size - 1)
+    ymin = y_bins.min()
+    ymax = y_bins.max()
+    dely = (ymax - ymin) / (y_bins.size - 1)
+    mask = (
+        (particle[:, 0] >= xmin)
+        & (particle[:, 0] <= xmax)
+        & (particle[:, 1] >= ymin)
+        & (particle[:, 1] <= ymax)
+    )
+    particle = np.compress(mask, particle[:, 0:6], axis=0)
+    data = np.zeros((particle.shape[0], 4), dtype=particle.dtype)
+
+    # parallel and perpendicular velocities
+    ix = np.floor((particle[:, 0] - xmin) / delx).astype(int)
+    iy = np.floor((particle[:, 1] - ymin) / dely).astype(int)
+    bx = bb[iy, ix, 0]
+    by = bb[iy, ix, 1]
+    bz = bb[iy, ix, 2]
+    ux = particle[:, 3] - vb[iy, ix, 0]
+    uy = particle[:, 4] - vb[iy, ix, 1]
+    uz = particle[:, 5] - vb[iy, ix, 2]
+    upara = ux * bx + uy * by + uz * bz
+    uperp = np.sqrt(
+        (ux - upara * bx) ** 2 + (uy - upara * by) ** 2 + (uz - upara * bz) ** 2
+    )
+    uabs = np.sqrt(upara**2 + uperp**2)
+    ucos = upara / uabs
+
+    # calculate distribution function in cylindrical coordinates
+    bins = (uperp_bins, upara_bins, y_bins, x_bins)
+    data[:, 0] = uperp
+    data[:, 1] = upara
+    data[:, 2] = particle[:, 1]
+    data[:, 3] = particle[:, 0]
+    result = np.histogramdd(data, bins=bins)
+    delu_para = np.diff(upara_bins)[np.newaxis, :]
+    delu_perp = np.diff(uperp_bins)[:, np.newaxis]
+    jacobian = np.pi * (uperp_bins[+1:] + uperp_bins[:-1])[:, np.newaxis]
+    area = delx * dely * delu_para * delu_perp
+    c_dist = result[0] / (area * jacobian)[:, :, np.newaxis, np.newaxis]
+
+    # calculate distribution function in polar coordinates
+    bins = (ucos_bins, uabs_bins, y_bins, x_bins)
+    data[:, 0] = ucos
+    data[:, 1] = uabs
+    data[:, 2] = particle[:, 1]
+    data[:, 3] = particle[:, 0]
+    result = np.histogramdd(data, bins=bins)
+    delu_abs = np.diff(uabs_bins)[np.newaxis, :]
+    delu_cos = np.diff(ucos_bins)[:, np.newaxis]
+    area = delx * dely * delu_abs * delu_cos
+    p_dist = result[0] / area[:, :, np.newaxis, np.newaxis]
+
+    return c_dist, p_dist
