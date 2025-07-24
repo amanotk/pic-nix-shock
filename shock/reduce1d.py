@@ -13,9 +13,9 @@ import tqdm
 import numpy as np
 import scipy.ndimage as ndimage
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 
 mpl.use("Agg") if __name__ == "__main__" else None
+import matplotlib.pyplot as plt
 
 # global configuration
 plt.rcParams.update({"font.size": 12})
@@ -23,84 +23,11 @@ plt.rcParams.update({"font.size": 12})
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 import picnix
-
-try:
-    from . import utils
-except ImportError:
-    import utils
+import base
+import utils
 
 
-def get_colorbar_position_next(ax, pad=0.05):
-    axpos = ax.get_position()
-    caxpos = [
-        axpos.x0 + axpos.width * (1 + pad),
-        axpos.y0,
-        axpos.width * pad,
-        axpos.height,
-    ]
-    return caxpos
-
-
-def get_vlim(vars, vmag=100):
-    vlims = []
-    for v in vars:
-        vmin = np.sign(v.min()) * np.ceil(np.abs(v.min()) * vmag) / vmag
-        vmax = np.sign(v.max()) * np.ceil(np.abs(v.max()) * vmag) / vmag
-        vlims.append([vmin, vmax])
-    return vlims
-
-
-class JobExecutor:
-    def __init__(self, config_file):
-        self.config_file = config_file
-        self.options = self.read_config()
-        self.parameter = self.read_parameter()
-
-    def read_config(self):
-        filename = self.config_file
-        if not os.path.exists(filename):
-            raise FileNotFoundError(f"Configuration file not found: {filename}")
-
-        if filename.endswith(".toml"):
-            with open(filename, "r") as fileobj:
-                config = toml.load(fileobj)
-        elif filename.endswith(".json"):
-            with open(filename, "r") as fileobj:
-                config = json.load(fileobj)
-        else:
-            raise ValueError("Unsupported configuration file format")
-
-        # Resolve profile path relative to config file
-        if "profile" in config:
-            config_dir = os.path.dirname(os.path.abspath(filename))
-            profile_path = os.path.join(config_dir, config["profile"])
-            config["profile"] = os.path.normpath(profile_path)
-
-        return config
-
-    def read_parameter(self):
-        # read parameter from profile
-        with open(self.options["profile"], "rb") as fp:
-            obj = msgpack.load(fp)
-            parameter = obj["configuration"]["parameter"]
-        return parameter
-
-    def get_dirname(self):
-        dirname = self.options.get("dirname", None)
-        if dirname is None:
-            raise ValueError("dirname is not specified")
-        elif not os.path.exists(dirname):
-            os.makedirs(dirname)
-        return dirname
-
-    def get_filename(self, basename, ext):
-        return os.sep.join([self.get_dirname(), basename + ext])
-
-    def main(self, basename):
-        raise NotImplementedError
-
-
-class DataReducer(JobExecutor):
+class DataReducer(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
         if "reduce" in self.options:
@@ -275,7 +202,7 @@ class DataReducer(JobExecutor):
                 fp["step"][i] = common_step[index]
 
 
-class DataPlotter(JobExecutor):
+class DataPlotter(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
         if "plot" in self.options:
@@ -425,7 +352,7 @@ class DataPlotter(JobExecutor):
         )
         axs[2].set_ylabel(r"$u_y / c$")
         # add colorbar for fuy using get_colorbar_position_next
-        cax2 = fig.add_axes(get_colorbar_position_next(axs[2], pad=0.025))
+        cax2 = fig.add_axes(base.get_colorbar_position_next(axs[2], pad=0.025))
         plt.colorbar(img2, cax=cax2)
         cax2.set_ylabel(r"$f(u_y)$  [arb. unit]")
 
@@ -437,7 +364,7 @@ class DataPlotter(JobExecutor):
         axs[3].set_ylabel(r"$p / m_e c$")
         axs[3].semilogy()
         # add colorbar for fp4 using get_colorbar_position_next
-        cax3 = fig.add_axes(get_colorbar_position_next(axs[3], pad=0.025))
+        cax3 = fig.add_axes(base.get_colorbar_position_next(axs[3], pad=0.025))
         plt.colorbar(img3, cax=cax3)
         cax3.set_ylabel(r"$p^4 f(p)$  [arb. unit]")
 
@@ -537,16 +464,18 @@ class DataPlotter(JobExecutor):
             print("no plot to save")
 
 
-if __name__ == "__main__":
+def main():
     import argparse
+
+    script_name = "reduce1d"
 
     parser = argparse.ArgumentParser(description="Quicklook Script")
     parser.add_argument(
-        "-p",
-        "--basename",
+        "-o",
+        "--output",
         type=str,
-        default="reduce1d",
-        help="basename used for output file",
+        default=script_name,
+        help="basename used for output files",
     )
     parser.add_argument(
         "-j",
@@ -557,18 +486,18 @@ if __name__ == "__main__":
     )
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
-
-    # read configuration file in TOML or JSON format
-    filename = args.config[0]
-
-    if not os.path.exists(filename):
-        print("Configuration file not found")
-        sys.exit(1)
+    config = args.config[0]
+    output = args.output
 
     # perform the job
     if args.job == "reduce":
-        obj = DataReducer(filename)
-        obj.main(args.basename)
-    elif args.job == "plot":
-        obj = DataPlotter(filename)
-        obj.main(args.basename)
+        obj = DataReducer(config)
+        obj.main(output)
+
+    if args.job == "plot":
+        obj = DataPlotter(config)
+        obj.main(output)
+
+
+if __name__ == "__main__":
+    main()

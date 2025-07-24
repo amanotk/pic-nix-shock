@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 import os
 import sys
 import pathlib
@@ -10,7 +9,6 @@ import msgpack
 import toml
 import json
 import tqdm
-
 import numpy as np
 import scipy.ndimage as ndimage
 import matplotlib as mpl
@@ -24,82 +22,11 @@ plt.rcParams.update({"font.size": 12})
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 import picnix
-
-try:
-    from . import utils
-except ImportError:
-    import utils
+import base
+import utils
 
 
-def get_colorbar_position_next(ax, pad=0.05):
-    axpos = ax.get_position()
-    caxpos = [
-        axpos.x0 + axpos.width * (1 + pad),
-        axpos.y0,
-        axpos.width * pad,
-        axpos.height,
-    ]
-    return caxpos
-
-
-def get_vlim(vars, vmag=100):
-    vlims = []
-    for v in vars:
-        vmin = np.sign(v.min()) * np.ceil(np.abs(v.min()) * vmag) / vmag
-        vmax = np.sign(v.max()) * np.ceil(np.abs(v.max()) * vmag) / vmag
-        vlims.append([vmin, vmax])
-    return vlims
-
-
-class JobExecutor:
-    def __init__(self, config_file):
-        self.config_file = config_file
-        self.options = self.read_config()
-        # self.parameter is initialized in subclasses if needed
-
-    def read_config(self):
-        filename = self.config_file
-        if not os.path.exists(filename):
-            raise FileNotFoundError(f"Configuration file not found: {filename}")
-
-        if filename.endswith(".toml"):
-            with open(filename, "r") as fileobj:
-                config = toml.load(fileobj)
-        elif filename.endswith(".json"):
-            with open(filename, "r") as fileobj:
-                config = json.load(fileobj)
-        else:
-            raise ValueError("Unsupported configuration file format")
-
-        # Resolve profile path relative to config file
-        if "profile" in config:
-            config_dir = os.path.dirname(os.path.abspath(filename))
-            profile_path = os.path.join(config_dir, config["profile"])
-            config["profile"] = os.path.normpath(profile_path)
-
-        return config
-
-    def read_parameter(self):
-        # read parameter from profile
-        with open(self.options["profile"], "rb") as fp:
-            obj = msgpack.load(fp)
-            parameter = obj["configuration"]["parameter"]
-        return parameter
-
-    def get_filename(self, basename, ext):
-        dirname = self.options.get("dirname", None)
-        if dirname is None:
-            raise ValueError("dirname is not specified")
-        elif not os.path.exists(dirname):
-            os.makedirs(dirname)
-
-        return os.sep.join([dirname, basename + ext])
-
-    def main(self, basename):
-        raise NotImplementedError
-
-
-class DataReducer(JobExecutor):
+class DataReducer(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
         if "reduce" in self.options:
@@ -230,7 +157,7 @@ class DataReducer(JobExecutor):
                 fp["Ji"][i, ...] = ji
 
 
-class SummaryPlotter(JobExecutor):
+class SummaryPlotter(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
         if "plot" in self.options:
@@ -351,7 +278,7 @@ class SummaryPlotter(JobExecutor):
         xmax = X.max()
         ymin = Y.min()
         ymax = Y.max()
-        vlim = get_vlim(vars, 10)
+        vlim = base.get_vlim(vars, 10)
 
         fig = plt.figure(figsize=(10, 8), dpi=120)
         fig.subplots_adjust(
@@ -392,7 +319,7 @@ class SummaryPlotter(JobExecutor):
             axs[i].yaxis.set_minor_locator(mpl.ticker.MultipleLocator(5))
             axs[i].set_aspect("equal")
             # colorbar
-            cxs[i] = plt.axes(get_colorbar_position_next(axs[i], 0.025))
+            cxs[i] = plt.axes(base.get_colorbar_position_next(axs[i], 0.025))
             plt.colorbar(cax=cxs[i])
             axs[i].set_title(labels[i])
         [axs[i].set_ylabel(r"$y / c/\omega_{pe}$") for i in (0, 1, 2)]
@@ -405,7 +332,7 @@ class SummaryPlotter(JobExecutor):
         xmax = X.max()
         ymin = Y.min()
         ymax = Y.max()
-        vlim = get_vlim(vars, 10)
+        vlim = base.get_vlim(vars, 10)
 
         fig = self.plot_dict["fig"]
         axs = self.plot_dict["axs"]
@@ -427,16 +354,18 @@ class SummaryPlotter(JobExecutor):
         return {"fig": fig, "axs": axs, "img": img, "cxs": cxs}
 
 
-if __name__ == "__main__":
+def main():
     import argparse
+
+    script_name = "wavetool"
 
     parser = argparse.ArgumentParser(description="Quicklook Script")
     parser.add_argument(
-        "-p",
-        "--basename",
+        "-o",
+        "--output",
         type=str,
-        default="wavetool",
-        help="basename used for output image and movie files",
+        default=script_name,
+        help="basename used for output files",
     )
     parser.add_argument(
         "-j",
@@ -447,12 +376,18 @@ if __name__ == "__main__":
     )
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
+    config = args.config[0]
+    output = args.output
 
     # perform the job
     if args.job == "reduce":
-        obj = DataReducer(args.config[0])
-        obj.main(args.basename)
+        obj = DataReducer(config)
+        obj.main(output)
 
     if args.job == "plot":
-        obj = SummaryPlotter(args.config[0])
-        obj.main(args.basename)
+        obj = SummaryPlotter(config)
+        obj.main(output)
+
+
+if __name__ == "__main__":
+    main()

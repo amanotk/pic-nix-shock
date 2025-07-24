@@ -26,62 +26,11 @@ plt.rcParams.update({"font.size": 12})
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 import picnix
-
-try:
-    from . import utils
-except ImportError:
-    import utils
+import base
+import utils
 
 
-class JobExecutor:
-    def __init__(self, config_file):
-        self.config_file = config_file
-        self.options = self.read_config()
-        # self.parameter is initialized in subclasses if needed
-
-    def read_config(self):
-        filename = self.config_file
-        if not os.path.exists(filename):
-            raise FileNotFoundError(f"Configuration file not found: {filename}")
-
-        if filename.endswith(".toml"):
-            with open(filename, "r") as fileobj:
-                config = toml.load(fileobj)
-        elif filename.endswith(".json"):
-            with open(filename, "r") as fileobj:
-                config = json.load(fileobj)
-        else:
-            raise ValueError("Unsupported configuration file format")
-
-        # Resolve profile path relative to config file
-        if "profile" in config:
-            config_dir = os.path.dirname(os.path.abspath(filename))
-            profile_path = os.path.join(config_dir, config["profile"])
-            config["profile"] = os.path.normpath(profile_path)
-
-        return config
-
-    def read_parameter(self):
-        # read parameter from profile
-        with open(self.options["profile"], "rb") as fp:
-            obj = msgpack.load(fp)
-            parameter = obj["configuration"]["parameter"]
-        return parameter
-
-    def get_filename(self, basename, ext):
-        dirname = self.options.get("dirname", None)
-        if dirname is None:
-            raise ValueError("dirname is not specified")
-        elif not os.path.exists(dirname):
-            os.makedirs(dirname)
-
-        return os.sep.join([dirname, basename + ext])
-
-    def main(self, basename):
-        raise NotImplementedError
-
-
-class DataReducer(JobExecutor):
+class DataReducer(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
         if "reduce" in self.options:
@@ -109,6 +58,7 @@ class DataReducer(JobExecutor):
     def message(self, msg):
         if self.is_root:
             print(msg)
+            sys.stdout.flush()
 
     def save(self, filename):
         profile = self.options.get("profile", None)
@@ -131,7 +81,7 @@ class DataReducer(JobExecutor):
         uperp_range = self.options.get("uperp_range", [0.0, +1.2])
         uabs_nbins = self.options.get("uabs_nbins", 80)
         uabs_range = self.options.get("uabs_range", [1.0e-3, 1.0e1])
-        ucos_nbins = self.options.get("ucos_nbins", 17)
+        ucos_nbins = self.options.get("ucos_nbins", 25)
         ucos_range = [-1.0, 1.0]
 
         method = self.options.get("method", "async")
@@ -216,13 +166,13 @@ class DataReducer(JobExecutor):
             time = run.get_time_at(prefix, step)
             xmin = np.polyval(shock_position, time) + x_offset
             ymin = 0.0
-            x_bins_new = x_bins + xmin
-            y_bins_new = y_bins + ymin
+            x_bins_new = x_bins.copy() + xmin
+            y_bins_new = y_bins.copy() + ymin
             self.process_field(run, step, xc, x_bins_new, num_average, bb, vb)
 
             # process electrons
-            self.worker_params["x_bins"][...] = x_bins_new
-            self.worker_params["y_bins"][...] = y_bins_new
+            self.worker_params["x_bins"] = x_bins_new
+            self.worker_params["y_bins"] = y_bins_new
             jsonfiles = run.diag_handlers[prefix].find_json_at_step(step)
             self.process_particle(jsonfiles)
 
@@ -287,8 +237,8 @@ class DataReducer(JobExecutor):
             fp["vb"][index, ...] = self.worker_params["vb"]
             fp["c_dist"][index, ...] = self.worker_params["c_dist"]
             fp["p_dist"][index, ...] = self.worker_params["p_dist"]
-            fp["x_bins"][index, ...] = self.worker_params["x_bins"]
-            fp["y_bins"][index, ...] = self.worker_params["y_bins"]
+            fp["x_bins"][index, ...] = x_bins
+            fp["y_bins"][index, ...] = y_bins
 
     def process_field(self, run, step, xc, x_bins, num_average, bb, vb):
         if self.is_root:
@@ -416,16 +366,18 @@ class DataReducer(JobExecutor):
         MPI.COMM_WORLD.Reduce(mpi_vars["p_dist"], None, op=MPI.SUM, root=0)
 
 
-if __name__ == "__main__":
+def main():
     import argparse
+
+    script_name = "vdist"
 
     parser = argparse.ArgumentParser(description="Quicklook Script")
     parser.add_argument(
-        "-p",
-        "--basename",
+        "-o",
+        "--output",
         type=str,
-        default="vdist",
-        help="basename used for output image and movie files",
+        default=script_name,
+        help="basename used for output files",
     )
     parser.add_argument(
         "-j",
@@ -436,8 +388,14 @@ if __name__ == "__main__":
     )
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
+    config = args.config[0]
+    output = args.output
 
     # perform the job
     if args.job == "reduce":
-        obj = DataReducer(args.config[0])
-        obj.main(args.basename)
+        obj = DataReducer(config)
+        obj.main(output)
+
+
+if __name__ == "__main__":
+    main()
