@@ -9,7 +9,9 @@ import h5py
 import msgpack
 import toml
 import json
-import tqdm
+import concurrent.futures
+from mpi4py import MPI
+from mpi4py.futures import MPICommExecutor
 
 import numpy as np
 import scipy.ndimage as ndimage
@@ -86,8 +88,11 @@ class DataReducer(JobExecutor):
             for key in self.options["reduce"]:
                 self.options[key] = self.options["reduce"][key]
         self.parameter = self.read_parameter()
+        # for MPI
+        self.is_root = MPI.COMM_WORLD.Get_rank() == 0
 
     def main(self, basename):
+        self.worker_params = {}
         self.save(self.get_filename(basename, ".h5"))
 
     def average1d(self, x, size):
@@ -100,6 +105,10 @@ class DataReducer(JobExecutor):
 
     def encode(self, data):
         return np.frombuffer(pickle.dumps(data), np.int8)
+
+    def message(self, msg):
+        if self.is_root:
+            print(msg)
 
     def save(self, filename):
         profile = self.options.get("profile", None)
@@ -125,11 +134,10 @@ class DataReducer(JobExecutor):
         ucos_nbins = self.options.get("ucos_nbins", 17)
         ucos_range = [-1.0, 1.0]
 
-        method = self.options.get("method", "thread")
+        method = self.options.get("method", "async")
         run = picnix.Run(profile, config=config, method=method)
         config = self.encode(run.config)
 
-        field_step = run.get_step("field")
         particle_step = run.get_step(prefix)
         index_min = np.searchsorted(particle_step, step_min)
         index_end = np.searchsorted(particle_step, step_max)
@@ -160,8 +168,86 @@ class DataReducer(JobExecutor):
         c_dist = np.zeros((uperp_nbins, upara_nbins, My, Mx), dtype=np.float64)
         p_dist = np.zeros((ucos_nbins, uabs_nbins, My, Mx), dtype=np.float64)
 
-        if not os.path.exists(filename) or overwrite == True:
-            # create HDF5 file and datasets first
+        self.worker_params["config_encoded"] = config
+        self.worker_params["Nt"] = Nt
+        self.worker_params["Mx"] = Mx
+        self.worker_params["My"] = My
+        self.worker_params["uperp_nbins"] = uperp_nbins
+        self.worker_params["upara_nbins"] = upara_nbins
+        self.worker_params["ucos_nbins"] = ucos_nbins
+        self.worker_params["uabs_nbins"] = uabs_nbins
+        self.worker_params["upara_bins"] = upara_bins
+        self.worker_params["uperp_bins"] = uperp_bins
+        self.worker_params["uabs_bins"] = uabs_bins
+        self.worker_params["ucos_bins"] = ucos_bins
+        self.worker_params["name"] = "up00"
+        self.worker_params["bb"] = bb
+        self.worker_params["vb"] = vb
+        self.worker_params["c_dist"] = c_dist
+        self.worker_params["p_dist"] = p_dist
+        self.worker_params["x_bins"] = x_bins
+        self.worker_params["y_bins"] = y_bins
+        self.worker_params["blocksize"] = 2**20
+
+        # create HDF5 file and datasets first
+        self.create_hdf5_file(filename, overwrite)
+        MPI.COMM_WORLD.Barrier()
+
+        # read step
+        with h5py.File(filename, "r") as fp:
+            step_in_file = fp["step"][()]
+
+        # process data for each step
+        for index, step_index in enumerate(index_range):
+            # skip if the step is already stored
+            if step_in_file[index] == particle_step[step_index]:
+                continue
+
+            self.message(f"Processing step : {step_index:8d}")
+
+            # clear first
+            bb[...] = 0.0
+            vb[...] = 0.0
+            c_dist[...] = 0.0
+            p_dist[...] = 0.0
+
+            # process field data
+            step = particle_step[step_index]
+            time = run.get_time_at(prefix, step)
+            xmin = np.polyval(shock_position, time) + x_offset
+            ymin = 0.0
+            x_bins_new = x_bins + xmin
+            y_bins_new = y_bins + ymin
+            self.process_field(run, step, xc, x_bins_new, num_average, bb, vb)
+
+            # process electrons
+            self.worker_params["x_bins"][...] = x_bins_new
+            self.worker_params["y_bins"][...] = y_bins_new
+            jsonfiles = run.diag_handlers[prefix].find_json_at_step(step)
+            self.process_particle(jsonfiles)
+
+            # store data
+            self.write_hdf5_data(filename, index, step, time)
+            MPI.COMM_WORLD.Barrier()
+
+    def create_hdf5_file(self, filename, overwrite):
+        if not self.is_root:
+            return
+
+        if not os.path.exists(filename) or overwrite is True:
+            config = self.worker_params["config_encoded"]
+            Nt = self.worker_params["Nt"]
+            Mx = self.worker_params["Mx"]
+            My = self.worker_params["My"]
+            uperp_nbins = self.worker_params["uperp_nbins"]
+            upara_nbins = self.worker_params["upara_nbins"]
+            ucos_nbins = self.worker_params["ucos_nbins"]
+            uabs_nbins = self.worker_params["uabs_nbins"]
+            upara_bins = self.worker_params["upara_bins"]
+            uperp_bins = self.worker_params["uperp_bins"]
+            uabs_bins = self.worker_params["uabs_bins"]
+            ucos_bins = self.worker_params["ucos_bins"]
+
             with h5py.File(filename, "w") as fp:
                 dummpy_step = (-1) * np.ones((Nt,), np.int32)
                 fp.create_dataset("config", data=config, dtype=np.int8)
@@ -185,106 +271,149 @@ class DataReducer(JobExecutor):
                 fp.create_dataset("uabs_bins", data=uabs_bins, dtype=np.float64)
                 fp.create_dataset("ucos_bins", data=ucos_bins, dtype=np.float64)
 
-        # read step
-        with h5py.File(filename, "r") as fp:
-            step_in_file = fp["step"][()]
+    def write_hdf5_data(self, filename, index, step, time):
+        if not self.is_root:
+            return
 
-        # read and process data for each step
-        for i, index in enumerate(tqdm.tqdm(index_range)):
-            # skip if the step is already stored
-            if step_in_file[i] == particle_step[index]:
-                continue
+        x_bins = self.worker_params["x_bins"]
+        y_bins = self.worker_params["y_bins"]
 
-            # clear
-            c_dist[...] = 0.0
-            p_dist[...] = 0.0
-            bb[...] = 0.0
-            vb[...] = 0.0
+        with h5py.File(filename, "a") as fp:
+            fp["step"][index] = step
+            fp["t"][index] = time
+            fp["x"][index, ...] = 0.5 * (x_bins[:-1] + x_bins[+1:])
+            fp["y"][index, ...] = 0.5 * (y_bins[:-1] + y_bins[+1:])
+            fp["bb"][index, ...] = self.worker_params["bb"]
+            fp["vb"][index, ...] = self.worker_params["vb"]
+            fp["c_dist"][index, ...] = self.worker_params["c_dist"]
+            fp["p_dist"][index, ...] = self.worker_params["p_dist"]
+            fp["x_bins"][index, ...] = self.worker_params["x_bins"]
+            fp["y_bins"][index, ...] = self.worker_params["y_bins"]
 
-            # read data
-            step = particle_step[index]
-            time = run.get_time_at(prefix, step)
-
-            # linear interpolation in x
-            xmin = np.polyval(shock_position, time) + x_offset
-            ymin = 0.0
-            xnew = 0.5 * (x_bins[:-1] + x_bins[+1:]) + xmin
+    def process_field(self, run, step, xc, x_bins, num_average, bb, vb):
+        if self.is_root:
+            xnew = 0.5 * (x_bins[:-1] + x_bins[+1:])
             xind = xc.searchsorted(xnew)
             delta = (xc[xind] - xnew) / (xc[xind] - xc[xind - 1])[np.newaxis, :]
 
             # magnetic field direction
             data = run.read_at("field", step, "uf")
-            uf = self.average2d(data["uf"].mean(axis=0), num_average)
-            Bx = delta * uf[..., xind - 1, 3] + (1 - delta) * uf[..., xind, 3]
-            By = delta * uf[..., xind - 1, 4] + (1 - delta) * uf[..., xind, 4]
-            Bz = delta * uf[..., xind - 1, 5] + (1 - delta) * uf[..., xind, 5]
+            uf_raw = data["uf"].mean(axis=0)
+            uf_avg = self.average2d(uf_raw, num_average)
+            Bx = delta * uf_avg[..., xind - 1, 3] + (1 - delta) * uf_avg[..., xind, 3]
+            By = delta * uf_avg[..., xind - 1, 4] + (1 - delta) * uf_avg[..., xind, 4]
+            Bz = delta * uf_avg[..., xind - 1, 5] + (1 - delta) * uf_avg[..., xind, 5]
             BB = np.sqrt(Bx**2 + By**2 + Bz**2)
             bb[..., 0] = Bx / BB
             bb[..., 1] = By / BB
             bb[..., 2] = Bz / BB
+            # try to free memory explicitly
+            del uf_raw, uf_avg, data
+            run.clear_cache()
 
             # bulk velocity
             data = run.read_at("field", step, "um")
-            ue = self.average2d(data["um"][..., 0, 0:4].mean(axis=0), num_average)
-            ro = delta * ue[..., xind - 1, 0] + (1 - delta) * ue[..., xind, 0]
-            jx = delta * ue[..., xind - 1, 1] + (1 - delta) * ue[..., xind, 1]
-            jy = delta * ue[..., xind - 1, 2] + (1 - delta) * ue[..., xind, 2]
-            jz = delta * ue[..., xind - 1, 3] + (1 - delta) * ue[..., xind, 3]
+            ue_raw = data["um"][..., 0, 0:4].mean(axis=0)
+            ue_avg = self.average2d(ue_raw, num_average)
+            ro = delta * ue_avg[..., xind - 1, 0] + (1 - delta) * ue_avg[..., xind, 0]
+            jx = delta * ue_avg[..., xind - 1, 1] + (1 - delta) * ue_avg[..., xind, 1]
+            jy = delta * ue_avg[..., xind - 1, 2] + (1 - delta) * ue_avg[..., xind, 2]
+            jz = delta * ue_avg[..., xind - 1, 3] + (1 - delta) * ue_avg[..., xind, 3]
             vb[..., 0] = jx / ro
             vb[..., 1] = jy / ro
             vb[..., 2] = jz / ro
+            # try to free memory explicitly
+            del ue_raw, ue_avg, data
+            run.clear_cache()
 
-            # process electons
-            options = {
-                "bb": bb,
-                "vb": vb,
-                "c_dist": c_dist,
-                "p_dist": p_dist,
-                "x_bins": x_bins + xmin,
-                "y_bins": y_bins + ymin,
-                "upara_bins": upara_bins,
-                "uperp_bins": uperp_bins,
-                "uabs_bins": uabs_bins,
-                "ucos_bins": ucos_bins,
-                "blocksize": 2**20,
-            }
-            jsonfiles = run.diag_handlers[prefix].find_json_at_step(step)
-            self.process_particle(jsonfiles, "up00", **options)
+        # broadcast results
+        MPI.COMM_WORLD.Bcast([bb, MPI.DOUBLE], root=0)
+        MPI.COMM_WORLD.Bcast([vb, MPI.DOUBLE], root=0)
 
-            # store data
-            with h5py.File(filename, "a") as fp:
-                fp["step"][i] = step
-                fp["t"][i] = time
-                fp["x"][i, ...] = 0.5 * (x_bins[:-1] + x_bins[+1:]) + xmin
-                fp["y"][i, ...] = 0.5 * (y_bins[:-1] + y_bins[+1:]) + ymin
-                fp["bb"][i, ...] = options["bb"]
-                fp["vb"][i, ...] = options["vb"]
-                fp["c_dist"][i, ...] = options["c_dist"]
-                fp["p_dist"][i, ...] = options["p_dist"]
-                fp["x_bins"][i, ...] = options["x_bins"]
-                fp["y_bins"][i, ...] = options["y_bins"]
+    def process_particle(self, jsonfiles):
+        global mpi_vars
 
-    def process_particle(self, jsonfiles, dsname, **opt):
-        blocksize = opt.get("blocksize")
-        c_dist = opt.get("c_dist")
-        p_dist = opt.get("p_dist")
+        # global variables for MPI workers
+        mpi_vars_keys = [
+            "bb",
+            "vb",
+            "c_dist",
+            "p_dist",
+            "x_bins",
+            "y_bins",
+            "upara_bins",
+            "uperp_bins",
+            "uabs_bins",
+            "ucos_bins",
+        ]
+        mpi_vars = {
+            key: value
+            for key, value in self.worker_params.items()
+            if key in mpi_vars_keys
+        }
 
-        for f in jsonfiles:
-            dataset, meta = picnix.read_jsonfile(f)
-            byteorder, layout, datafile = picnix.process_meta(meta)
-            offset, dtype, shape = picnix.get_dataset_info(dataset[dsname], byteorder)
-            Np = shape[0]  # number of particles
-            Nc = shape[1]  # number of components
+        executor_args = dict()
+        with MPICommExecutor(**executor_args) as executor:
+            if executor is None:
+                raise RuntimeError("MPICommExecutor is not available!")
 
-            with open(datafile, "r") as fp:
+            # submit tasks
+            future_list = []
+            name = self.worker_params.get("name")
+            blocksize = self.worker_params.get("blocksize")
+            for f in jsonfiles:
+                dataset, meta = picnix.read_jsonfile(f)
+                byteorder, layout, datafile = picnix.process_meta(meta)
+                offset, dtype, shape = picnix.get_dataset_info(dataset[name], byteorder)
+                Np = shape[0]  # number of particle
+                Nc = shape[1]  # number of components
+
                 for ip in range(0, Np, blocksize):
-                    fp.seek(offset + ip * Nc * np.dtype(dtype).itemsize)
-                    count = min(blocksize, Np - ip)
-                    data = np.fromfile(fp, dtype=dtype, count=count * Nc)
-                    data = data.reshape((count, Nc))
-                    result = utils.calc_velocity_dist4d(data, **opt)
-                    c_dist[...] += result[0]
-                    p_dist[...] += result[1]
+                    index_range = (ip, min(ip + blocksize, Np))
+                    block = {
+                        "offset": offset + ip * Nc * np.dtype(dtype).itemsize,
+                        "dtype": dtype,
+                        "count": (index_range[1] - index_range[0]) * Nc,
+                        "shape": (index_range[1] - index_range[0], Nc),
+                    }
+                    # submit
+                    future = executor.submit(self.mpi_work_dist, datafile, block)
+                    future_list.append(future)
+
+            # wait for tasks to complete
+            concurrent.futures.wait(future_list)
+
+            # reduce results
+            comm_size = MPI.COMM_WORLD.Get_size()
+            for rank in range(comm_size - 1):
+                executor.submit(self.mpi_reduce_dist)
+            MPI.COMM_WORLD.Reduce(None, mpi_vars["c_dist"], op=MPI.SUM, root=0)
+            MPI.COMM_WORLD.Reduce(None, mpi_vars["p_dist"], op=MPI.SUM, root=0)
+
+    @staticmethod
+    def mpi_work_dist(datafile, block):
+        global mpi_vars
+
+        offset = block["offset"]
+        dtype = block["dtype"]
+        count = block["count"]
+        shape = block["shape"]
+
+        with open(datafile, "r") as fp:
+            fp.seek(offset)
+            data = np.fromfile(fp, dtype=dtype, count=count).reshape(shape)
+            result = utils.calc_velocity_dist4d(data, **mpi_vars)
+
+        # accumulate results in global variables
+        mpi_vars["c_dist"][...] += result[0]
+        mpi_vars["p_dist"][...] += result[1]
+
+    @staticmethod
+    def mpi_reduce_dist():
+        global mpi_vars
+
+        MPI.COMM_WORLD.Reduce(mpi_vars["c_dist"], None, op=MPI.SUM, root=0)
+        MPI.COMM_WORLD.Reduce(mpi_vars["p_dist"], None, op=MPI.SUM, root=0)
 
 
 if __name__ == "__main__":
