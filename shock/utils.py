@@ -231,10 +231,9 @@ def calc_velocity_dist4d(particle, **kwargs):
     data[:, 3] = particle[:, 0]
     result = np.histogramdd(data, bins=bins)
     delu_para = np.diff(upara_bins)[np.newaxis, :]
-    delu_perp = np.diff(uperp_bins)[:, np.newaxis]
-    jacobian = np.pi * (uperp_bins[+1:] + uperp_bins[:-1])[:, np.newaxis]
-    area = delx * dely * delu_para * delu_perp
-    c_dist = result[0] / (area * jacobian)[:, :, np.newaxis, np.newaxis]
+    delu_perp = np.diff(uperp_bins**2)[:, np.newaxis]
+    jacobian = np.pi * delu_perp * delu_para * dely * delx
+    c_dist = result[0] / jacobian[:, :, np.newaxis, np.newaxis]
 
     # calculate distribution function in polar coordinates
     bins = (ucos_bins, uabs_bins, y_bins, x_bins)
@@ -243,9 +242,9 @@ def calc_velocity_dist4d(particle, **kwargs):
     data[:, 2] = particle[:, 1]
     data[:, 3] = particle[:, 0]
     result = np.histogramdd(data, bins=bins)
-    delu_abs = np.diff(uabs_bins)[np.newaxis, :]
+    delu_abs = np.diff(uabs_bins**3)[np.newaxis, :]
     delu_cos = np.diff(ucos_bins)[:, np.newaxis]
-    area = delx * dely * delu_abs * delu_cos
-    p_dist = result[0] / area[:, :, np.newaxis, np.newaxis]
+    jacobian = 2 * np.pi / 3 * delu_cos * delu_abs * dely * delx
+    p_dist = result[0] / jacobian[:, :, np.newaxis, np.newaxis]
 
     return c_dist, p_dist
