@@ -186,7 +186,7 @@ class SummaryPlotter(base.JobExecutor):
 
             for i in tqdm.tqdm(range(t.shape[0])):
                 # read data
-                X, Y, vars, labels = self.get_plot_variables(fp, i)
+                X, Y, Az, vars, labels = self.get_plot_variables(fp, i)
 
                 # apply bandpass filter if requested
                 if "bandpass" in self.options:
@@ -195,7 +195,7 @@ class SummaryPlotter(base.JobExecutor):
                     dh = xx[1] - xx[0]
                     vars = utils.bandpass_filter2d(vars, kl, kh, dk, dh)
 
-                self.plot(X, Y, t[i] * wci, vars, labels)
+                self.plot(X, Y, t[i] * wci, Az, vars, labels)
                 self.save(png + "-{:08d}.png".format(i))
 
         # convert to mp4
@@ -211,6 +211,7 @@ class SummaryPlotter(base.JobExecutor):
     def get_plot_variables(self, fileobj, index):
         sigma = self.parameter["sigma"]
         u0 = self.parameter["u0"]
+        dh = self.parameter["delh"]
         B0 = np.sqrt(sigma) / np.sqrt(1 + u0**2)
         E0 = B0 * u0 / np.sqrt(1 + u0**2)
         J0 = B0
@@ -263,17 +264,21 @@ class SummaryPlotter(base.JobExecutor):
         else:
             raise ValueError("Invalid quantity")
 
-        return X, Y, vars, labels
+        # vector potential
+        B = fileobj["B"][index, ...]
+        Az = utils.calc_vector_potential2d(B, dh)
 
-    def plot(self, X, Y, time, vars, labels):
+        return X, Y, Az, vars, labels
+
+    def plot(self, X, Y, time, Az, vars, labels):
         if self.plot_dict is None:
-            self.plot_dict = self.plot_new(X, Y, vars, labels)
+            self.plot_dict = self.plot_new(X, Y, Az, vars, labels)
         else:
-            self.plot_dict = self.plot_update(X, Y, vars, labels)
+            self.plot_dict = self.plot_update(X, Y, Az, vars, labels)
 
         plt.suptitle(r"$\Omega_{{ci}} t$ = {:5.2f}".format(time))
 
-    def plot_new(self, X, Y, vars, labels):
+    def plot_new(self, X, Y, Az, vars, labels):
         xmin = X.min()
         xmax = X.max()
         ymin = Y.min()
@@ -302,6 +307,9 @@ class SummaryPlotter(base.JobExecutor):
 
         cxs = [0] * 6
         img = [0] * 6
+        cnt = [0] * 6
+        clb = [0] * 6
+
         for i in range(6):
             plt.sca(axs[i])
             # plot and colorbar
@@ -312,6 +320,8 @@ class SummaryPlotter(base.JobExecutor):
                 vmax=vlim[i][1],
                 origin="lower",
             )
+            # field lines
+            cnt[i] = plt.contour(X, Y, Az, levels=25, colors="k", linewidths=0.5)
             # appearance
             axs[i].set_xlim(xmin, xmax)
             axs[i].set_ylim(ymin, ymax)
@@ -320,14 +330,14 @@ class SummaryPlotter(base.JobExecutor):
             axs[i].set_aspect("equal")
             # colorbar
             cxs[i] = plt.axes(base.get_colorbar_position_next(axs[i], 0.025))
-            plt.colorbar(cax=cxs[i])
+            clb[i] = plt.colorbar(img[i], cax=cxs[i])
             axs[i].set_title(labels[i])
         [axs[i].set_ylabel(r"$y / c/\omega_{pe}$") for i in (0, 1, 2)]
         [axs[i].set_xlabel(r"$x / c/\omega_{pe}$") for i in (2, 5)]
 
-        return {"fig": fig, "axs": axs, "img": img, "cxs": cxs}
+        return {"fig": fig, "axs": axs, "img": img, "cnt": cnt, "cxs": cxs, "clb": clb}
 
-    def plot_update(self, X, Y, vars, labels):
+    def plot_update(self, X, Y, Az, vars, labels):
         xmin = X.min()
         xmax = X.max()
         ymin = Y.min()
@@ -337,22 +347,28 @@ class SummaryPlotter(base.JobExecutor):
         fig = self.plot_dict["fig"]
         axs = self.plot_dict["axs"]
         img = self.plot_dict["img"]
+        cnt = self.plot_dict["cnt"]
         cxs = self.plot_dict["cxs"]
+        clb = self.plot_dict["clb"]
+
+        # remove contours
+        for i in range(6):
+            cnt[i].remove()
+
         for i in range(6):
             plt.sca(axs[i])
             # image
             img[i].set_array(vars[i])
             img[i].set_extent([xmin, xmax, ymin, ymax])
+            cnt[i] = plt.contour(X, Y, Az, levels=25, colors="k", linewidths=0.5)
             axs[i].set_xlim(xmin, xmax)
             axs[i].set_ylim(ymin, ymax)
             axs[i].set_title(labels[i])
             # colorbar
             img[i].set_clim(vlim[i])
-            cxs[i].cla()
-            plt.colorbar(img[i], cax=cxs[i])
+            clb[i].update_normal(img[i])
 
-        return {"fig": fig, "axs": axs, "img": img, "cxs": cxs}
-
+        return {"fig": fig, "axs": axs, "img": img, "cnt": cnt, "cxs": cxs, "clb": clb}
 
 def main():
     import argparse

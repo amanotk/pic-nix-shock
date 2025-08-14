@@ -248,3 +248,12 @@ def calc_velocity_dist4d(particle, **kwargs):
     p_dist = result[0] / jacobian[:, :, np.newaxis, np.newaxis]
 
     return c_dist, p_dist
+
+def calc_vector_potential2d(B, delh):
+    Nx = B.shape[1]
+    Ny = B.shape[0]
+    Az = np.zeros((Ny + 1, Nx + 1))
+    Az[0, +1:] = -np.cumsum(B[0, :, 1], axis=0) * delh
+    Az[+1:, +1:] = np.cumsum(B[:, :, 0], axis=0) * delh + Az[0, +1:]
+    Az += np.abs(Az.min())
+    return 0.25 * (Az[+1:, +1:] + Az[:-1, +1:] + Az[+1:, :-1] + Az[:-1, :-1])
