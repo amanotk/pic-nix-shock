@@ -25,12 +25,12 @@ import utils
 import picnix
 
 
-class DataReducer(base.JobExecutor):
+class DataAnalyzer(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
-        if "reduce" in self.options:
-            for key in self.options["reduce"]:
-                self.options[key] = self.options["reduce"][key]
+        if "analyze" in self.options:
+            for key in self.options["analyze"]:
+                self.options[key] = self.options["analyze"][key]
         self.parameter = self.read_parameter()
 
     def main(self, basename):
@@ -54,8 +54,8 @@ class DataReducer(base.JobExecutor):
         overwrite = self.options.get("overwrite", False)
         num_average = self.options.get("num_average", 4)
         num_xwindow = self.options.get("num_xwindow", 2048)
-        step_min = self.options.get("step_min", 380000)
-        step_max = self.options.get("step_max", 380000)
+        step_min = self.options.get("step_min", 0)
+        step_max = self.options.get("step_max", 2**31)
         x_offset = self.options.get("x_offset", -80)
         shock_position = self.options.get("shock_position", [1.66365906e-02, -1.39911575e02])
 
@@ -68,6 +68,8 @@ class DataReducer(base.JobExecutor):
         config = self.encode(run.config)
 
         field_step = run.get_step(prefix)
+        step_min = max(field_step.min(), step_min)
+        step_max = min(field_step.max(), step_max)
         index_min = np.searchsorted(field_step, step_min)
         index_end = np.searchsorted(field_step, step_max)
         index_range = np.arange(index_min, index_end + 1)
@@ -379,8 +381,8 @@ def main():
         "-j",
         "--job",
         type=str,
-        default="reduce",
-        help="Type of job to perform (reduce, plot)",
+        default="analyze",
+        help="Type of job to perform (analyze, plot)",
     )
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
@@ -388,8 +390,8 @@ def main():
     output = args.output
 
     # perform the job
-    if args.job == "reduce":
-        obj = DataReducer(config)
+    if args.job == "analyze":
+        obj = DataAnalyzer(config)
         obj.main(output)
 
     if args.job == "plot":
