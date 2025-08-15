@@ -1,17 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import os
-import sys
 import pathlib
 import pickle
+import sys
+
 import h5py
-import msgpack
-import toml
-import json
-import tqdm
+import matplotlib as mpl
 import numpy as np
 import scipy.ndimage as ndimage
-import matplotlib as mpl
+import tqdm
 
 mpl.use("Agg") if __name__ == "__main__" else None
 import matplotlib.pyplot as plt
@@ -21,9 +19,10 @@ plt.rcParams.update({"font.size": 12})
 
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
-import picnix
 import base
 import utils
+
+import picnix
 
 
 class DataReducer(base.JobExecutor):
@@ -58,9 +57,7 @@ class DataReducer(base.JobExecutor):
         step_min = self.options.get("step_min", 380000)
         step_max = self.options.get("step_max", 380000)
         x_offset = self.options.get("x_offset", -80)
-        shock_position = self.options.get(
-            "shock_position", [1.66365906e-02, -1.39911575e02]
-        )
+        shock_position = self.options.get("shock_position", [1.66365906e-02, -1.39911575e02])
 
         method = self.options.get("method", "thread")
         run = picnix.Run(profile, config=config, method=method)
@@ -99,18 +96,10 @@ class DataReducer(base.JobExecutor):
                 fp.create_dataset("t", (Nt,), dtype=np.float64)
                 fp.create_dataset("x", (Nt, Mx), dtype=np.float64, chunks=(1, Mx))
                 fp.create_dataset("y", (Nt, My), dtype=np.float64, chunks=(1, My))
-                fp.create_dataset(
-                    "E", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3)
-                )
-                fp.create_dataset(
-                    "B", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3)
-                )
-                fp.create_dataset(
-                    "Je", (Nt, My, Mx, 4), dtype=np.float64, chunks=(1, My, Mx, 4)
-                )
-                fp.create_dataset(
-                    "Ji", (Nt, My, Mx, 4), dtype=np.float64, chunks=(1, My, Mx, 4)
-                )
+                fp.create_dataset("E", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
+                fp.create_dataset("B", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
+                fp.create_dataset("Je", (Nt, My, Mx, 4), dtype=np.float64, chunks=(1, My, Mx, 4))
+                fp.create_dataset("Ji", (Nt, My, Mx, 4), dtype=np.float64, chunks=(1, My, Mx, 4))
 
         # read step
         with h5py.File(filename, "r") as fp:
@@ -138,9 +127,7 @@ class DataReducer(base.JobExecutor):
             xmin = np.polyval(shock_position, time) + x_offset
             xnew = np.arange(Mx) * num_average * dh + xmin
             xind = xc.searchsorted(xnew)
-            delta = ((xc[xind] - xnew) / (xc[xind] - xc[xind - 1]))[
-                np.newaxis, :, np.newaxis
-            ]
+            delta = ((xc[xind] - xnew) / (xc[xind] - xc[xind - 1]))[np.newaxis, :, np.newaxis]
             uf = delta * uf[..., xind - 1, :] + (1 - delta) * uf[..., xind, :]
             je = delta * je[..., xind - 1, :] + (1 - delta) * je[..., xind, :]
             ji = delta * ji[..., xind - 1, :] + (1 - delta) * ji[..., xind, :]
@@ -172,7 +159,7 @@ class SummaryPlotter(base.JobExecutor):
 
     def main(self, basename):
         filename = self.get_filename(basename, ".h5")
-        output = self.options.get("output", "plot")
+        output = self.options.get("output", "wavetool")
 
         # read parameters here
         with h5py.File(filename, "r") as fp:
@@ -293,9 +280,7 @@ class SummaryPlotter(base.JobExecutor):
             "origin": "lower",
             "cmap": "viridis",
         }
-        args = [
-            {**common_args, "vmin": vlim[i][0], "vmax": vlim[i][1]} for i in range(6)
-        ]
+        args = [{**common_args, "vmin": vlim[i][0], "vmax": vlim[i][1]} for i in range(6)]
 
         fig = plt.figure(figsize=(10, 8), dpi=120)
         fig.subplots_adjust(
@@ -306,9 +291,7 @@ class SummaryPlotter(base.JobExecutor):
             hspace=0.20,
             wspace=0.22,
         )
-        gridspec = fig.add_gridspec(
-            3, 3, height_ratios=[1, 1, 1], width_ratios=[50, 1, 50]
-        )
+        gridspec = fig.add_gridspec(3, 3, height_ratios=[1, 1, 1], width_ratios=[50, 1, 50])
         axs = [0] * 6
         axs[0] = fig.add_subplot(gridspec[0, 0])
         axs[1] = fig.add_subplot(gridspec[1, 0])
