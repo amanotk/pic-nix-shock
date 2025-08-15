@@ -183,6 +183,7 @@ class SummaryPlotter(base.JobExecutor):
 
         with h5py.File(filename, "r") as fp:
             t = fp["t"]
+            step = fp["step"]
 
             for i in tqdm.tqdm(range(t.shape[0])):
                 # read data
@@ -196,7 +197,7 @@ class SummaryPlotter(base.JobExecutor):
                     vars = utils.bandpass_filter2d(vars, kl, kh, dk, dh)
 
                 self.plot(X, Y, t[i] * wci, Az, vars, labels)
-                self.save(png + "-{:08d}.png".format(i))
+                self.save(png + "-{:08d}.png".format(step[i]))
 
         # convert to mp4
         fps = self.options.get("fps", 10)
@@ -283,7 +284,18 @@ class SummaryPlotter(base.JobExecutor):
         xmax = X.max()
         ymin = Y.min()
         ymax = Y.max()
+
+        # automatic colorbar limits
         vlim = base.get_vlim(vars, 10)
+
+        common_args = {
+            "extent": [xmin, xmax, ymin, ymax],
+            "origin": "lower",
+            "cmap": "viridis",
+        }
+        args = [
+            {**common_args, "vmin": vlim[i][0], "vmax": vlim[i][1]} for i in range(6)
+        ]
 
         fig = plt.figure(figsize=(10, 8), dpi=120)
         fig.subplots_adjust(
@@ -312,14 +324,8 @@ class SummaryPlotter(base.JobExecutor):
 
         for i in range(6):
             plt.sca(axs[i])
-            # plot and colorbar
-            img[i] = plt.imshow(
-                vars[i],
-                extent=[xmin, xmax, ymin, ymax],
-                vmin=vlim[i][0],
-                vmax=vlim[i][1],
-                origin="lower",
-            )
+            # plot image
+            img[i] = plt.imshow(vars[i], **args[i])
             # field lines
             cnt[i] = plt.contour(X, Y, Az, levels=25, colors="k", linewidths=0.5)
             # appearance
@@ -332,6 +338,7 @@ class SummaryPlotter(base.JobExecutor):
             cxs[i] = plt.axes(base.get_colorbar_position_next(axs[i], 0.025))
             clb[i] = plt.colorbar(img[i], cax=cxs[i])
             axs[i].set_title(labels[i])
+
         [axs[i].set_ylabel(r"$y / c/\omega_{pe}$") for i in (0, 1, 2)]
         [axs[i].set_xlabel(r"$x / c/\omega_{pe}$") for i in (2, 5)]
 
@@ -360,6 +367,7 @@ class SummaryPlotter(base.JobExecutor):
             # image
             img[i].set_array(vars[i])
             img[i].set_extent([xmin, xmax, ymin, ymax])
+            # field lines
             cnt[i] = plt.contour(X, Y, Az, levels=25, colors="k", linewidths=0.5)
             axs[i].set_xlim(xmin, xmax)
             axs[i].set_ylim(ymin, ymax)
@@ -369,6 +377,7 @@ class SummaryPlotter(base.JobExecutor):
             clb[i].update_normal(img[i])
 
         return {"fig": fig, "axs": axs, "img": img, "cnt": cnt, "cxs": cxs, "clb": clb}
+
 
 def main():
     import argparse
