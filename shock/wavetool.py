@@ -74,14 +74,18 @@ class DataAnalyzer(base.JobExecutor):
         index_end = np.searchsorted(field_step, step_max)
         index_range = np.arange(index_min, index_end + 1)
 
+        data = run.read_at(prefix, field_step[index_min], "uf")
+        xc = data["xc"]
+        yc = data["yc"]
+
         Nt = index_end - index_min + 1
         Nx = num_xwindow
-        Ny = run.Ny
+        Ny = yc.size
         Mx = Nx // num_average
         My = Ny // num_average
-        dh = run.delh
-        xc = self.average1d(run.xc, num_average)
-        yc = self.average1d(run.yc, num_average)
+        dh = xc[1] - xc[0]
+        xc = self.average1d(xc, num_average)
+        yc = self.average1d(yc, num_average)
 
         # adjust the boundary
         xc[0] = xc[1] - dh * num_average

@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 
 import numpy as np
-import scipy as sp
 from scipy import signal
-import matplotlib as mpl
-from matplotlib import pyplot as plt
 
 
 def kspace_kernerl1d(kx, kl, kh, dk):
@@ -95,7 +92,10 @@ def find_ramp(xx, yy, dh, fc):
     dy = dy / np.abs(dy).max()  # normalize
     index, _ = signal.find_peaks(dy, prominence=0.5, distance=100)
     # find the ramp position as the right-most peak
-    return xc[index[-1]]
+    if len(index) == 0:
+        return None
+    else:
+        return xc[index[-1]]
 
 
 def calc_shock_speed(params, steps, times, xc, var, fc=0.1):
@@ -114,6 +114,10 @@ def calc_shock_speed(params, steps, times, xc, var, fc=0.1):
     for index, step in enumerate(steps):
         x_sh[index] = find_ramp(xc, yy[step], delh, fc)
         t_sh[index] = times[step]
+    # drop if x_sh is None
+    valid = np.isfinite(x_sh)
+    t_sh = t_sh[valid]
+    x_sh = x_sh[valid]
 
     # linear fit to the shock position
     poly = np.polyfit(t_sh, x_sh, 1)
@@ -217,9 +221,7 @@ def calc_velocity_dist4d(particle, **kwargs):
     uy = particle[:, 4] - vb[iy, ix, 1]
     uz = particle[:, 5] - vb[iy, ix, 2]
     upara = ux * bx + uy * by + uz * bz
-    uperp = np.sqrt(
-        (ux - upara * bx) ** 2 + (uy - upara * by) ** 2 + (uz - upara * bz) ** 2
-    )
+    uperp = np.sqrt((ux - upara * bx) ** 2 + (uy - upara * by) ** 2 + (uz - upara * bz) ** 2)
     uabs = np.sqrt(upara**2 + uperp**2)
     ucos = upara / uabs
 
@@ -248,6 +250,7 @@ def calc_velocity_dist4d(particle, **kwargs):
     p_dist = result[0] / jacobian[:, :, np.newaxis, np.newaxis]
 
     return c_dist, p_dist
+
 
 def calc_vector_potential2d(B, delh):
     Nx = B.shape[1]

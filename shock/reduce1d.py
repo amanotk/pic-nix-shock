@@ -2,17 +2,14 @@
 # -*- coding: utf-8 -*-
 
 import os
-import sys
 import pathlib
 import pickle
+import sys
+
 import h5py
-import msgpack
-import toml
-import json
-import tqdm
-import numpy as np
-import scipy.ndimage as ndimage
 import matplotlib as mpl
+import numpy as np
+import tqdm
 
 mpl.use("Agg") if __name__ == "__main__" else None
 import matplotlib.pyplot as plt
@@ -22,9 +19,10 @@ plt.rcParams.update({"font.size": 12})
 
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
-import picnix
 import base
 import utils
+
+import picnix
 
 
 class DataReducer(base.JobExecutor):
@@ -57,10 +55,12 @@ class DataReducer(base.JobExecutor):
         index_end = np.searchsorted(common_step, step_max)
         index_range = np.arange(index_min, index_end + 1)
 
+        data = run.read_at("field", field_step[0], "uf")
+
+        xc = data["xc"]
         Nt = index_end - index_min + 1
-        Nx = run.Nx
-        dh = run.delh
-        xx = run.xc
+        Nx = xc.size
+        dh = xc[1] - xc[0]
 
         # binning
         Nbinx = self.options.get("Nbinx")
@@ -83,7 +83,7 @@ class DataReducer(base.JobExecutor):
             with h5py.File(filename, "w") as fp:
                 ### write data independent of step
                 fp.create_dataset("config", data=config, dtype=np.int8)
-                fp.create_dataset("x", data=xx, dtype=np.float64)
+                fp.create_dataset("x", data=xc, dtype=np.float64)
                 fp.create_dataset("xbine", data=xbine, dtype=np.float64)
                 fp.create_dataset("ubine", data=ubine, dtype=np.float64)
                 fp.create_dataset("ebine", data=ebine, dtype=np.float64)
@@ -100,20 +100,12 @@ class DataReducer(base.JobExecutor):
                 fp.create_dataset("Phi", (Nt, Nx), dtype=np.float64, chunks=(1, Nx))
                 # electron moments
                 fp.create_dataset("Re", (Nt, Nx), dtype=np.float64, chunks=(1, Nx))
-                fp.create_dataset(
-                    "Ve", (Nt, Nx, 3), dtype=np.float64, chunks=(1, Nx, 3)
-                )
-                fp.create_dataset(
-                    "Pe", (Nt, Nx, 6), dtype=np.float64, chunks=(1, Nx, 6)
-                )
+                fp.create_dataset("Ve", (Nt, Nx, 3), dtype=np.float64, chunks=(1, Nx, 3))
+                fp.create_dataset("Pe", (Nt, Nx, 6), dtype=np.float64, chunks=(1, Nx, 6))
                 # ion moments
                 fp.create_dataset("Ri", (Nt, Nx), dtype=np.float64, chunks=(1, Nx))
-                fp.create_dataset(
-                    "Vi", (Nt, Nx, 3), dtype=np.float64, chunks=(1, Nx, 3)
-                )
-                fp.create_dataset(
-                    "Pi", (Nt, Nx, 6), dtype=np.float64, chunks=(1, Nx, 6)
-                )
+                fp.create_dataset("Vi", (Nt, Nx, 3), dtype=np.float64, chunks=(1, Nx, 3))
+                fp.create_dataset("Pi", (Nt, Nx, 6), dtype=np.float64, chunks=(1, Nx, 6))
                 # electron phase space
                 fp.create_dataset(
                     "Feu",
@@ -276,9 +268,7 @@ class DataPlotter(base.JobExecutor):
             by = B[..., 1]
             bz = B[..., 2]
             bb = np.sqrt(bx**2 + by**2 + bz**2)
-            t_sh, x_sh, v_sh, poly_sh = utils.calc_shock_speed(
-                params, fit_steps, t, x, bb, 0.01
-            )
+            t_sh, x_sh, v_sh, poly_sh = utils.calc_shock_speed(params, fit_steps, t, x, bb, 0.01)
         return poly_sh
 
     def convert_to_momentum_spectrum(self, energy, dist):
@@ -316,14 +306,10 @@ class DataPlotter(base.JobExecutor):
 
         if self.plot_dict is None:
             # create new figure and axes
-            self.plot_dict = self.plot_new(
-                x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4
-            )
+            self.plot_dict = self.plot_new(x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4)
         else:
             # update existing figure and axes
-            self.plot_dict = self.plot_update(
-                x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4
-            )
+            self.plot_dict = self.plot_update(x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4)
 
         # update xrange and title
         self.plot_dict["axs"][-1].set_xlim(x_shock - 200, x_shock + 200)
@@ -347,9 +333,7 @@ class DataPlotter(base.JobExecutor):
         axs[1].legend(loc="upper left", bbox_to_anchor=(1, 1))
         # plot fuy
         X, Y = self.pcolormesh_args(xbine, ubine)
-        img2 = axs[2].pcolormesh(
-            X, Y, fuy, shading="nearest", norm=mpl.colors.LogNorm()
-        )
+        img2 = axs[2].pcolormesh(X, Y, fuy, shading="nearest", norm=mpl.colors.LogNorm())
         axs[2].set_ylabel(r"$u_y / c$")
         # add colorbar for fuy using get_colorbar_position_next
         cax2 = fig.add_axes(base.get_colorbar_position_next(axs[2], pad=0.025))
@@ -358,9 +342,7 @@ class DataPlotter(base.JobExecutor):
 
         # plot fp4
         X, Y = self.pcolormesh_args(xbine, pbine)
-        img3 = axs[3].pcolormesh(
-            X, Y, fp4, shading="nearest", norm=mpl.colors.LogNorm()
-        )
+        img3 = axs[3].pcolormesh(X, Y, fp4, shading="nearest", norm=mpl.colors.LogNorm())
         axs[3].set_ylabel(r"$p / m_e c$")
         axs[3].semilogy()
         # add colorbar for fp4 using get_colorbar_position_next
@@ -372,7 +354,7 @@ class DataPlotter(base.JobExecutor):
         psample = [0.6, 0.7, 0.8, 0.9, 1.0]
         pindex = np.searchsorted(pbine, psample)
         for i in range(len(psample)):
-            f_norm = fp4[:, pindex[i]] / np.max(fp4[:, pindex[i]])
+            f_norm = fp4[:, pindex[i]] / (np.max(fp4[:, pindex[i]]) + 1.0e-32)
             axs[4].plot(
                 xbinc,
                 f_norm * 10 ** (-i),
@@ -418,22 +400,18 @@ class DataPlotter(base.JobExecutor):
         axs[1].legend(loc="upper left", bbox_to_anchor=(1, 1))
         # plot fuy
         X, Y = self.pcolormesh_args(xbine, ubine)
-        img2 = axs[2].pcolormesh(
-            X, Y, fuy, shading="nearest", norm=mpl.colors.LogNorm()
-        )
+        img2 = axs[2].pcolormesh(X, Y, fuy, shading="nearest", norm=mpl.colors.LogNorm())
         axs[2].set_ylabel(r"$u_y / c$")
         # plot fp4
         X, Y = self.pcolormesh_args(xbine, pbine)
-        img3 = axs[3].pcolormesh(
-            X, Y, fp4, shading="nearest", norm=mpl.colors.LogNorm()
-        )
+        img3 = axs[3].pcolormesh(X, Y, fp4, shading="nearest", norm=mpl.colors.LogNorm())
         axs[3].set_ylabel(r"$p / m_e c$")
         axs[3].semilogy()
         # plot spectrum
         psample = [0.6, 0.7, 0.8, 0.9, 1.0]
         pindex = np.searchsorted(pbine, psample)
         for i in range(len(psample)):
-            f_norm = fp4[:, pindex[i]] / np.max(fp4[:, pindex[i]])
+            f_norm = fp4[:, pindex[i]] / (np.max(fp4[:, pindex[i]]) + 1.0e-32)
             axs[4].plot(
                 xbinc,
                 f_norm * 10 ** (-i),
@@ -481,8 +459,8 @@ def main():
         "-j",
         "--job",
         type=str,
-        default="reduce",
-        help="Type of job to perform (reduce, plot)",
+        default="analyze",
+        help="Type of job to perform (analyze, plot)",
     )
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
@@ -490,7 +468,7 @@ def main():
     output = args.output
 
     # perform the job
-    if args.job == "reduce":
+    if args.job == "analyze":
         obj = DataReducer(config)
         obj.main(output)
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-import numpy as np
 import matplotlib as mpl
+import numpy as np
 from matplotlib import pyplot as plt
 
 import picnix
@@ -25,8 +25,9 @@ def calc_particle_histogram(run, step, species, xbin, ubin, ebin):
 
 def calc_velocity_dist(run, step, species, xmin, xmax, **kwargs):
     # avearage magnetic field and ExB drift velocity
-    index = slice(*tuple(np.searchsorted(run.xc, [xmin, xmax])))
-    uf = run.read_at("field", step, "uf")["uf"][..., index, :].mean(axis=(0, 1, 2))
+    data = run.read_at("field", step, "uf")
+    xindex = slice(*tuple(np.searchsorted(data["xc"], [xmin, xmax])))
+    uf = data["uf"][..., xindex, :].mean(axis=(0, 1, 2))
     ex = uf[0]
     ey = uf[1]
     ez = uf[2]
@@ -49,9 +50,7 @@ def calc_velocity_dist(run, step, species, xmin, xmax, **kwargs):
     gamma = np.sqrt(1 + particle[:, 3] ** 2 + particle[:, 4] ** 2 + particle[:, 5] ** 2)
     upara = (ux * bx + uy * by + uz * bz) / bb
     uperp = np.sqrt(
-        (ux - upara * bx / bb) ** 2
-        + (uy - upara * by / bb) ** 2
-        + (uz - upara * bz / bb) ** 2
+        (ux - upara * bx / bb) ** 2 + (uy - upara * by / bb) ** 2 + (uz - upara * bz / bb) ** 2
     )
 
     # energy distribution
@@ -161,9 +160,7 @@ def summary_plot_1d(run, step, **kwargs):
         hspace=0.25,
         wspace=0.02,
     )
-    gridspec = fig.add_gridspec(
-        6, 2, height_ratios=[1, 1, 1, 1, 1, 1], width_ratios=[50, 1]
-    )
+    gridspec = fig.add_gridspec(6, 2, height_ratios=[1, 1, 1, 1, 1, 1], width_ratios=[50, 1])
     axs = [0] * 6
     cxs = [0] * 6
     for i in range(6):
@@ -180,13 +177,14 @@ def summary_plot_1d(run, step, **kwargs):
     plt.suptitle(r"$\Omega_{{ci}} t$ = {:5.2f}".format(tt))
 
     # magnetic field
-    xindex = summary_get_index(run.xc, (xbine[0], xbine[1]))
-    xc = run.xc[xindex]
-    uf = run.read_at("field", step, "uf")["uf"].mean(axis=(0, 1))[xindex]
+    data = run.read_at("field", step, "uf")
+    xc = data["xc"]
+    uf = data["uf"].mean(axis=(0, 1))
+    xindex = summary_get_index(xc, (xbine[0], xbine[1]))
     plt.sca(axs[0])
-    plt.plot(xc, uf[:, 3] / b0, "k-", label=r"$B_x$")
-    plt.plot(xc, uf[:, 4] / b0, "r-", label=r"$B_y$")
-    plt.plot(xc, uf[:, 5] / b0, "b-", label=r"$B_z$")
+    plt.plot(xc[xindex], uf[xindex, 3] / b0, "k-", label=r"$B_x$")
+    plt.plot(xc[xindex], uf[xindex, 4] / b0, "r-", label=r"$B_y$")
+    plt.plot(xc[xindex], uf[xindex, 5] / b0, "b-", label=r"$B_z$")
     plt.legend(bbox_to_anchor=(1, 1), loc="upper left")
 
     # phase space
@@ -249,8 +247,6 @@ def summary_plot_vector_2d(X, Y, time, vars, labels, vlim=None):
 
 def summary_efield_2d(run, step, **kwargs):
     vlim = kwargs.get("vlim", None)
-    xindex = summary_get_index(run.xc, kwargs.get("xlim", None))
-    yindex = summary_get_index(run.yc, kwargs.get("ylim", None))
 
     param = run.config["parameter"]
     wci = np.sqrt(param["sigma"]) / param["mime"]
@@ -258,10 +254,14 @@ def summary_efield_2d(run, step, **kwargs):
     b0 = np.sqrt(param["sigma"]) / np.sqrt(1 + u0**2)
     e0 = u0 * b0 / np.sqrt(1 + u0**2)
 
-    X, Y = np.meshgrid(run.xc[xindex], run.yc[yindex])
     time = wci * run.get_time_at("field", step)
     data = run.read_at("field", step, "uf")
     uf = data["uf"]
+    xc = data["xc"]
+    yc = data["yc"]
+    xindex = summary_get_index(xc, kwargs.get("xlim", None))
+    yindex = summary_get_index(yc, kwargs.get("ylim", None))
+    X, Y = np.meshgrid(xc[xindex], yc[yindex])
 
     Ex = uf[..., 0].mean(axis=(0))[yindex, xindex] / e0
     Ey = uf[..., 1].mean(axis=(0))[yindex, xindex] / e0
@@ -274,18 +274,20 @@ def summary_efield_2d(run, step, **kwargs):
 
 def summary_bfield_2d(run, step, **kwargs):
     vlim = kwargs.get("vlim", None)
-    xindex = summary_get_index(run.xc, kwargs.get("xlim", None))
-    yindex = summary_get_index(run.yc, kwargs.get("ylim", None))
 
     param = run.config["parameter"]
     wci = np.sqrt(param["sigma"]) / param["mime"]
     u0 = param["u0"]
     b0 = np.sqrt(param["sigma"]) / np.sqrt(1 + u0**2)
 
-    X, Y = np.meshgrid(run.xc[xindex], run.yc[yindex])
     time = wci * run.get_time_at("field", step)
     data = run.read_at("field", step, "uf")
     uf = data["uf"]
+    xc = data["xc"]
+    yc = data["yc"]
+    xindex = summary_get_index(xc, kwargs.get("xlim", None))
+    yindex = summary_get_index(yc, kwargs.get("ylim", None))
+    X, Y = np.meshgrid(xc[xindex], yc[yindex])
 
     Bx = uf[..., 3].mean(axis=(0))[yindex, xindex] / b0
     By = uf[..., 4].mean(axis=(0))[yindex, xindex] / b0
