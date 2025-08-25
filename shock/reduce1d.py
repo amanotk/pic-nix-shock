@@ -194,6 +194,62 @@ class DataReducer(base.JobExecutor):
                 fp["step"][i] = common_step[index]
 
 
+class ShockPositionModel(base.JobExecutor):
+    def __init__(self, config_file):
+        super().__init__(config_file)
+        if "position" in self.options:
+            for key in self.options["position"]:
+                self.options[key] = self.options["position"][key]
+
+    def main(self, basename):
+        filename = self.get_filename(basename, ".h5")
+        with h5py.File(filename, "r") as fp:
+            params = pickle.loads(fp["config"][()])["parameter"]
+            t = fp["t"][()]
+            x = fp["x"][()]
+            B = fp["B"][()]
+
+        mime = params["mime"]
+        wce = np.sqrt(params["sigma"])
+        wci = wce / mime
+        fit_range = self.options.get("fit_range", None)
+        fit_steps = self.handle_range(t, (fit_range[0] / wci, fit_range[1] / wci))
+        bx = B[..., 0]
+        by = B[..., 1]
+        bz = B[..., 2]
+        bb = np.sqrt(bx**2 + by**2 + bz**2)
+        print(fit_steps)
+        print(t[fit_steps[0]], t[fit_steps[-1]])
+        t_sh, x_sh, v_sh, poly = utils.calc_shock_speed(params, fit_steps, t, x, bb, 0.01)
+
+        self.poly = poly
+
+    def get_position(self):
+        return self.poly
+
+    def handle_range(self, t, fit_range):
+        if fit_range is None:
+            return np.arange(0, t.size)  # whole range
+
+        # assume list or tuple of length 2
+        range1 = fit_range[0]
+        range2 = fit_range[1]
+
+        # if range in step
+        if type(range1) is int and type(range2) is int:
+            return np.arange(range1, range2)
+
+        # if range in time (real-valued)
+        if np.isreal(range1) and np.isreal(range2):
+            tmin, tmax = t[0], t[-1]
+            imin, imax = 0, t.size - 1
+            index1 = np.argmin(np.abs(t - range1)) if tmin <= range1 else imin
+            index2 = np.argmin(np.abs(t - range2)) if tmax >= range2 else imax
+            return np.arange(index1, index2 + 1)
+
+        raise ValueError("Invalid fit_range")
+
+
 class DataPlotter(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
@@ -207,8 +263,11 @@ class DataPlotter(base.JobExecutor):
         output = self.options.get("output", "plot")
         outpath = os.sep.join([self.get_dirname(), output])
 
-        poly_sh = self.get_shock_poly_fit(filename)
-        print("Shock speed polynomial fit:", poly_sh)
+        # calculate shock position polynomial
+        model = ShockPositionModel(self.config_file)
+        model.main(basename)
+        shock_position = model.get_position()
+        print("Shock speed polynomial fit:", shock_position)
 
         with h5py.File(filename, "r") as fp:
             # read common parameters once
@@ -247,29 +306,13 @@ class DataPlotter(base.JobExecutor):
                 }
                 pngfile = "{:s}-{:08d}".format(outpath, step[i])
                 wci_time = wci * t[i]
-                x_shock = np.polyval(poly_sh, t[i])
+                x_shock = np.polyval(shock_position, t[i])
                 self.plot(x_shock, wci_time, params)
                 self.save(pngfile)
 
         # convert to mp4
         fps = self.options.get("fps", 10)
         picnix.convert_to_mp4("{:s}".format(outpath), fps, False)
-
-    def get_shock_poly_fit(self, filename, fit_steps=None):
-        with h5py.File(filename, "r") as fp:
-            config = pickle.loads(fp["config"][()])
-            t = fp["t"][()]
-            x = fp["x"][()]
-            B = fp["B"][()]
-            if fit_steps is None:
-                fit_steps = np.arange(0, t.size)
-            params = config["parameter"]
-            bx = B[..., 0]
-            by = B[..., 1]
-            bz = B[..., 2]
-            bb = np.sqrt(bx**2 + by**2 + bz**2)
-            t_sh, x_sh, v_sh, poly_sh = utils.calc_shock_speed(params, fit_steps, t, x, bb, 0.01)
-        return poly_sh
 
     def convert_to_momentum_spectrum(self, energy, dist):
         p = np.sqrt((energy + 1) ** 2 - 1)
@@ -460,7 +503,7 @@ def main():
         "--job",
         type=str,
         default="analyze",
-        help="Type of job to perform (analyze, plot)",
+        help="Type of job to perform (analyze, position, plot)",
     )
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
@@ -471,6 +514,11 @@ def main():
     if args.job == "analyze":
         obj = DataReducer(config)
         obj.main(output)
+
+    if args.job == "position":
+        obj = ShockPositionModel(config)
+        obj.main(output)
+        print("shock_position = [{:20.12e}, {:20.12e}]".format(*obj.get_position()))
 
     if args.job == "plot":
         obj = DataPlotter(config)
