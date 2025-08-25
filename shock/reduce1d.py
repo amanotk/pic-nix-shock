@@ -28,9 +28,9 @@ import picnix
 class DataReducer(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
-        if "reduce" in self.options:
-            for key in self.options["reduce"]:
-                self.options[key] = self.options["reduce"][key]
+        if "analyze" in self.options:
+            for key in self.options["analyze"]:
+                self.options[key] = self.options["analyze"][key]
 
     def main(self, basename):
         self.save(self.get_filename(basename, ".h5"))
@@ -218,8 +218,6 @@ class ShockPositionModel(base.JobExecutor):
         by = B[..., 1]
         bz = B[..., 2]
         bb = np.sqrt(bx**2 + by**2 + bz**2)
-        print(fit_steps)
-        print(t[fit_steps[0]], t[fit_steps[-1]])
         t_sh, x_sh, v_sh, poly = utils.calc_shock_speed(params, fit_steps, t, x, bb, 0.01)
 
         self.poly = poly
