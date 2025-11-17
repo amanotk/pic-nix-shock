@@ -167,6 +167,9 @@ class SummaryPlotter(base.JobExecutor):
         filename = self.get_filename(basename, ".h5")
         output = self.options.get("output", "wavetool")
 
+        step_min = self.options.get("step_min", 0)
+        step_max = self.options.get("step_max", 2**31)
+
         # read parameters here
         with h5py.File(filename, "r") as fp:
             self.parameter = pickle.loads(fp["config"][()])["parameter"]
@@ -177,8 +180,10 @@ class SummaryPlotter(base.JobExecutor):
         with h5py.File(filename, "r") as fp:
             t = fp["t"]
             step = fp["step"]
+            index_min = np.searchsorted(step, step_min)
+            index_max = np.searchsorted(step, step_max)
 
-            for i in tqdm.tqdm(range(t.shape[0])):
+            for i in tqdm.tqdm(range(index_min, index_max)):
                 # read data
                 X, Y, Az, vars, labels = self.get_plot_variables(fp, i)
 
