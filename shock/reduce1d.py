@@ -309,7 +309,11 @@ class DataPlotter(base.JobExecutor):
                     "B": fp["B"][i] / b0,
                     "Vi": fp["Vi"][i] / vai,
                     "fi_ux": fp["Fiu"][i, ..., 0],
+                    "fi_uy": fp["Fiu"][i, ..., 1],
+                    "fi_uz": fp["Fiu"][i, ..., 2],
+                    "fe_ux": fp["Feu"][i, ..., 0],
                     "fe_uy": fp["Feu"][i, ..., 1],
+                    "fe_uz": fp["Feu"][i, ..., 2],
                     "fe_ke": fe_ke,
                     "xbinc": xbinc,
                     "pbine": pbine,
@@ -341,35 +345,35 @@ class DataPlotter(base.JobExecutor):
         X, Y = np.broadcast_arrays(x[:, None], y[None, :])
         return X, Y
 
-    def plot_fi_ux(self, ax, params, fig=None):
-        fi_ux = params["fi_ux"]
+    def plot_fi(self, ax, params, component, fig=None):
+        data = params["fi_" + component]
         xbini = params["xbini"]
         ubini = params["ubini"]
         X, Y = self.pcolormesh_args(xbini, ubini)
-        img = ax.pcolormesh(X, Y, fi_ux, shading="nearest", norm=mpl.colors.LogNorm())
-        ax.set_ylabel(r"$u_{x} / c$")
+        img = ax.pcolormesh(X, Y, data, shading="nearest", norm=mpl.colors.LogNorm())
+        ax.set_ylabel(r"$u_{" + component[-1] + r"} / c$")
 
         cax = None
         if fig is not None:
             cax = fig.add_axes(base.get_colorbar_position_next(ax, pad=0.025))
             plt.colorbar(img, cax=cax)
-            cax.set_ylabel(r"$f_i(u_x)$  [arb. unit]")
+            cax.set_ylabel(r"$f_i(u_" + component[-1] + r")$  [arb. unit]")
 
         return img, cax
 
-    def plot_fe_uy(self, ax, params, fig=None):
-        fe_uy = params["fe_uy"]
+    def plot_fe(self, ax, params, component, fig=None):
+        data = params["fe_" + component]
         xbine = params["xbine"]
         ubine = params["ubine"]
         X, Y = self.pcolormesh_args(xbine, ubine)
-        img = ax.pcolormesh(X, Y, fe_uy, shading="nearest", norm=mpl.colors.LogNorm())
-        ax.set_ylabel(r"$u_{y} / c$")
+        img = ax.pcolormesh(X, Y, data, shading="nearest", norm=mpl.colors.LogNorm())
+        ax.set_ylabel(r"$u_{" + component[-1] + r"} / c$")
 
         cax = None
         if fig is not None:
             cax = fig.add_axes(base.get_colorbar_position_next(ax, pad=0.025))
             plt.colorbar(img, cax=cax)
-            cax.set_ylabel(r"$f_e(u_y)$  [arb. unit]")
+            cax.set_ylabel(r"$f_e(u_" + component[-1] + r")$  [arb. unit]")
 
         return img, cax
 
@@ -413,8 +417,12 @@ class DataPlotter(base.JobExecutor):
 
     def get_plot_function(self, name):
         mapping = {
-            "fi_ux": self.plot_fi_ux,
-            "fe_uy": self.plot_fe_uy,
+            "fi_ux": lambda ax, params, fig=None: self.plot_fi(ax, params, "ux", fig=fig),
+            "fi_uy": lambda ax, params, fig=None: self.plot_fi(ax, params, "uy", fig=fig),
+            "fi_uz": lambda ax, params, fig=None: self.plot_fi(ax, params, "uz", fig=fig),
+            "fe_ux": lambda ax, params, fig=None: self.plot_fe(ax, params, "ux", fig=fig),
+            "fe_uy": lambda ax, params, fig=None: self.plot_fe(ax, params, "uy", fig=fig),
+            "fe_uz": lambda ax, params, fig=None: self.plot_fe(ax, params, "uz", fig=fig),
             "fe_p4": self.plot_fe_p4,
             "spectrum": self.plot_spectrum,
         }
