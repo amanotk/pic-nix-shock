@@ -1,0 +1,20 @@
+dirname = "reduce1d"
+profile = "data/profile.msgpack"
+method = "async"
+overwrite = true
+
+[analyze]
+step_min = 1000000
+step_max = 100000000
+Nbinx = 4096
+Nbinu = 80
+ubine = [-0.8, +0.8]
+ebine = [1.0e-3, 1.0e+0] # log-scale
+ubini = [-0.05, +0.05]
+ebini = [1.0e-4, 1.0e-1] # log-scale
+
+[plot]
+panels = ["fi_ux", "fi_uy", "fe_ux", "fe_uy", "fe_p4"]
+
+[position]
+fit_range = [5.0, 16.0]
