@@ -255,6 +255,7 @@ class DataPlotter(base.JobExecutor):
             for key in self.options["plot"]:
                 self.options[key] = self.options["plot"][key]
         self.plot_dict = None
+        self.panels = self.options.get("panels", ["fi_ux", "fe_uy", "fe_p4"])
 
     def main(self, basename):
         filename = self.get_filename(basename, ".h5")
@@ -273,6 +274,8 @@ class DataPlotter(base.JobExecutor):
             xbine = fp["xbine"][()]
             ubine = fp["ubine"][()]
             ebine = fp["ebine"][()]
+            xbini = fp["xbini"][()]
+            ubini = fp["ubini"][()]
             step = fp["step"][()]
             t = fp["t"][()]
             x = fp["x"][()]
@@ -290,17 +293,27 @@ class DataPlotter(base.JobExecutor):
             # make plots
             wci = np.sqrt(sigma) / mime
             for i in tqdm.tqdm(range(step.shape[0])):
+                fe_ke = fp["Feu"][i, ..., 3]
+                pbinc, f_mom = self.convert_to_momentum_spectrum(ebinc, fe_ke)
+                pbine = np.sqrt((ebine + 1) ** 2 - 1)
+                fe_p4 = f_mom * pbinc[np.newaxis, :] ** 4
+
                 params = {
                     "xbine": xbine,
                     "ubine": ubine,
                     "ebine": ebine,
                     "ebinc": ebinc,
+                    "xbini": xbini,
+                    "ubini": ubini,
                     "x": x,
                     "B": fp["B"][i] / b0,
                     "Vi": fp["Vi"][i] / vai,
-                    "fuy": fp["Feu"][i, ..., 1],
-                    "f_ene": fp["Feu"][i, ..., 3],
+                    "fi_ux": fp["Fiu"][i, ..., 0],
+                    "fe_uy": fp["Feu"][i, ..., 1],
+                    "fe_ke": fe_ke,
                     "xbinc": xbinc,
+                    "pbine": pbine,
+                    "fe_p4": fe_p4,
                 }
                 pngfile = "{:s}-{:08d}".format(outpath, step[i])
                 wci_time = wci * t[i]
@@ -328,37 +341,106 @@ class DataPlotter(base.JobExecutor):
         X, Y = np.broadcast_arrays(x[:, None], y[None, :])
         return X, Y
 
-    def plot(self, x_shock, wci_t, params):
-        # update or create plot_dict for current frame
-        x = params["x"]
-        B = params["B"]
-        Vi = params["Vi"]
-        fuy = params["fuy"]
-        xbinc = params["xbinc"]
+    def plot_fi_ux(self, ax, params, fig=None):
+        fi_ux = params["fi_ux"]
+        xbini = params["xbini"]
+        ubini = params["ubini"]
+        X, Y = self.pcolormesh_args(xbini, ubini)
+        img = ax.pcolormesh(X, Y, fi_ux, shading="nearest", norm=mpl.colors.LogNorm())
+        ax.set_ylabel(r"$u_{x} / c$")
+
+        cax = None
+        if fig is not None:
+            cax = fig.add_axes(base.get_colorbar_position_next(ax, pad=0.025))
+            plt.colorbar(img, cax=cax)
+            cax.set_ylabel(r"$f_i(u_x)$  [arb. unit]")
+
+        return img, cax
+
+    def plot_fe_uy(self, ax, params, fig=None):
+        fe_uy = params["fe_uy"]
         xbine = params["xbine"]
         ubine = params["ubine"]
-        ebine = params["ebine"]
+        X, Y = self.pcolormesh_args(xbine, ubine)
+        img = ax.pcolormesh(X, Y, fe_uy, shading="nearest", norm=mpl.colors.LogNorm())
+        ax.set_ylabel(r"$u_{y} / c$")
 
-        # calculate per-step energy distribution and momentum spectrum
-        f_ene_step = params["f_ene"]
-        pbinc, f_mom = self.convert_to_momentum_spectrum(params["ebinc"], f_ene_step)
-        pbine = np.sqrt((ebine + 1) ** 2 - 1)
-        fp4 = f_mom * pbinc[np.newaxis, :] ** 4
+        cax = None
+        if fig is not None:
+            cax = fig.add_axes(base.get_colorbar_position_next(ax, pad=0.025))
+            plt.colorbar(img, cax=cax)
+            cax.set_ylabel(r"$f_e(u_y)$  [arb. unit]")
 
+        return img, cax
+
+    def plot_fe_p4(self, ax, params, fig=None):
+        fe_p4 = params["fe_p4"]
+        xbine = params["xbine"]
+        pbine = params["pbine"]
+        X, Y = self.pcolormesh_args(xbine, pbine)
+        img = ax.pcolormesh(X, Y, fe_p4, shading="nearest", norm=mpl.colors.LogNorm())
+        ax.set_ylabel(r"$p / m_e c$")
+        ax.semilogy()
+
+        cax = None
+        if fig is not None:
+            cax = fig.add_axes(base.get_colorbar_position_next(ax, pad=0.025))
+            plt.colorbar(img, cax=cax)
+            cax.set_ylabel(r"$p^4 f_e(p)$  [arb. unit]")
+
+        return img, cax
+
+    def plot_spectrum(self, ax, params, fig=None):
+        fe_p4 = params["fe_p4"]
+        pbine = params["pbine"]
+        xbinc = params["xbinc"]
+        psample = [0.6, 0.7, 0.8, 0.9, 1.0]
+        pindex = np.searchsorted(pbine, psample)
+        for i in range(len(psample)):
+            f_norm = fe_p4[:, pindex[i]] / (np.max(fe_p4[:, pindex[i]]) + 1.0e-32)
+            ax.plot(
+                xbinc,
+                f_norm * 10 ** (-i),
+                label=r"$p/m_e c = {:.1f}$".format(psample[i]),
+            )
+        ax.set_ylabel(r"$f(p)$ [arb. unit]")
+        ax.semilogy()
+        ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
+        ax.set_ylim(1.0e-6, 1.0e1)
+        ax.set_xlabel(r"$x / c / \omega_{pe}$")
+
+        return None, None
+
+    def get_plot_function(self, name):
+        mapping = {
+            "fi_ux": self.plot_fi_ux,
+            "fe_uy": self.plot_fe_uy,
+            "fe_p4": self.plot_fe_p4,
+            "spectrum": self.plot_spectrum,
+        }
+        return mapping.get(name)
+
+    def plot(self, x_shock, wci_t, params):
         if self.plot_dict is None:
             # create new figure and axes
-            self.plot_dict = self.plot_new(x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4)
+            self.plot_dict = self.plot_new(params)
         else:
             # update existing figure and axes
-            self.plot_dict = self.plot_update(x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4)
+            self.plot_dict = self.plot_update(params)
 
         # update xrange and title
         self.plot_dict["axs"][-1].set_xlim(x_shock - 200, x_shock + 200)
         plt.suptitle(r"$\Omega_{{ci}} t$ = {:.2f}".format(wci_t))
 
-    def plot_new(self, x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4):
+    def plot_new(self, params):
+        x = params["x"]
+        B = params["B"]
+        Vi = params["Vi"]
+
+        num_panels = 2 + len(self.panels)
+
         # create figure and axes for the first frame
-        fig, axs = plt.subplots(5, 1, figsize=(10, 10), sharex=True)
+        fig, axs = plt.subplots(num_panels, 1, figsize=(10, 2 * num_panels), sharex=True)
         fig.subplots_adjust(hspace=0.2, right=0.8, left=0.1, top=0.95, bottom=0.05)
         # plot B field
         axs[0].plot(x, B[:, 0], "k-", label="Bx")
@@ -372,58 +454,35 @@ class DataPlotter(base.JobExecutor):
         axs[1].plot(x, Vi[:, 2], "b-", label="Vz")
         axs[1].set_ylabel(r"$V_{i} / V_{A,i}$")
         axs[1].legend(loc="upper left", bbox_to_anchor=(1, 1))
-        # plot fuy
-        X, Y = self.pcolormesh_args(xbine, ubine)
-        img2 = axs[2].pcolormesh(X, Y, fuy, shading="nearest", norm=mpl.colors.LogNorm())
-        axs[2].set_ylabel(r"$u_y / c$")
-        # add colorbar for fuy using get_colorbar_position_next
-        cax2 = fig.add_axes(base.get_colorbar_position_next(axs[2], pad=0.025))
-        plt.colorbar(img2, cax=cax2)
-        cax2.set_ylabel(r"$f(u_y)$  [arb. unit]")
 
-        # plot fp4
-        X, Y = self.pcolormesh_args(xbine, pbine)
-        img3 = axs[3].pcolormesh(X, Y, fp4, shading="nearest", norm=mpl.colors.LogNorm())
-        axs[3].set_ylabel(r"$p / m_e c$")
-        axs[3].semilogy()
-        # add colorbar for fp4 using get_colorbar_position_next
-        cax3 = fig.add_axes(base.get_colorbar_position_next(axs[3], pad=0.025))
-        plt.colorbar(img3, cax=cax3)
-        cax3.set_ylabel(r"$p^4 f(p)$  [arb. unit]")
+        img = [None] * num_panels
+        cax = [None] * num_panels
 
-        # plot spectrum
-        psample = [0.6, 0.7, 0.8, 0.9, 1.0]
-        pindex = np.searchsorted(pbine, psample)
-        for i in range(len(psample)):
-            f_norm = fp4[:, pindex[i]] / (np.max(fp4[:, pindex[i]]) + 1.0e-32)
-            axs[4].plot(
-                xbinc,
-                f_norm * 10 ** (-i),
-                label=r"$p/m_e c = {:.1f}$".format(psample[i]),
-            )
-        axs[4].set_ylabel(r"$f(p)$ [arb. unit]")
-        axs[4].semilogy()
-        axs[4].legend(loc="upper left", bbox_to_anchor=(1, 1))
-        axs[4].set_ylim(1.0e-6, 1.0e1)
-        axs[4].set_xlabel(r"$x / c / \omega_{pe}$")
+        for i, name in enumerate(self.panels):
+            idx = i + 2
+            func = self.get_plot_function(name)
+            if func:
+                img[idx], cax[idx] = func(axs[idx], params, fig=fig)
+
         for ax in axs:
             ax.grid(True)
         fig.align_ylabels(axs)
+
         return {
             "fig": fig,
             "axs": axs,
-            "img2": img2,
-            "img3": img3,
-            "cax2": cax2,
-            "cax3": cax3,
+            "img": img,
+            "cax": cax,
         }
 
-    def plot_update(self, x, B, Vi, fuy, xbinc, xbine, ubine, pbine, fp4):
+    def plot_update(self, params):
+        x = params["x"]
+        B = params["B"]
+        Vi = params["Vi"]
+
         # update figure and axes for subsequent frames
         fig = self.plot_dict["fig"]
         axs = self.plot_dict["axs"]
-        img2 = self.plot_dict["img2"]
-        img3 = self.plot_dict["img3"]
         # clear each axes before re-plotting
         for ax in axs:
             ax.cla()
@@ -439,40 +498,25 @@ class DataPlotter(base.JobExecutor):
         axs[1].plot(x, Vi[:, 2], "b-", label="Vz")
         axs[1].set_ylabel(r"$V_{i} / V_{A,i}$")
         axs[1].legend(loc="upper left", bbox_to_anchor=(1, 1))
-        # plot fuy
-        X, Y = self.pcolormesh_args(xbine, ubine)
-        img2 = axs[2].pcolormesh(X, Y, fuy, shading="nearest", norm=mpl.colors.LogNorm())
-        axs[2].set_ylabel(r"$u_y / c$")
-        # plot fp4
-        X, Y = self.pcolormesh_args(xbine, pbine)
-        img3 = axs[3].pcolormesh(X, Y, fp4, shading="nearest", norm=mpl.colors.LogNorm())
-        axs[3].set_ylabel(r"$p / m_e c$")
-        axs[3].semilogy()
-        # plot spectrum
-        psample = [0.6, 0.7, 0.8, 0.9, 1.0]
-        pindex = np.searchsorted(pbine, psample)
-        for i in range(len(psample)):
-            f_norm = fp4[:, pindex[i]] / (np.max(fp4[:, pindex[i]]) + 1.0e-32)
-            axs[4].plot(
-                xbinc,
-                f_norm * 10 ** (-i),
-                label=r"$p/m_e c = {:.1f}$".format(psample[i]),
-            )
-        axs[4].set_ylabel(r"$f(p)$ [arb. unit]")
-        axs[4].semilogy()
-        axs[4].legend(loc="upper left", bbox_to_anchor=(1, 1))
-        axs[4].set_ylim(1.0e-6, 1.0e1)
-        axs[4].set_xlabel(r"$x / c / \omega_{pe}$")
+
+        img = self.plot_dict["img"]
+        cax = self.plot_dict["cax"]
+
+        for i, name in enumerate(self.panels):
+            idx = i + 2
+            func = self.get_plot_function(name)
+            if func:
+                img[idx], _ = func(axs[idx], params)
+
         for ax in axs:
             ax.grid(True)
         fig.align_ylabels(axs)
+
         return {
             "fig": fig,
             "axs": axs,
-            "img2": img2,
-            "img3": img3,
-            "cax2": self.plot_dict["cax2"],
-            "cax3": self.plot_dict["cax3"],
+            "img": img,
+            "cax": cax,
         }
 
     def save(self, filename):
@@ -488,7 +532,7 @@ def main():
 
     script_name = "reduce1d"
 
-    parser = argparse.ArgumentParser(description="Quicklook Script")
+    parser = argparse.ArgumentParser(description="Data Reduction Script")
     parser.add_argument(
         "-o",
         "--output",
@@ -501,26 +545,41 @@ def main():
         "--job",
         type=str,
         default="analyze",
-        help="Type of job to perform (analyze, position, plot)",
+        help="Type of job to perform (analyze, position, plot). Can be combined with comma.",
     )
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
     config = args.config[0]
     output = args.output
 
-    # perform the job
-    if args.job == "analyze":
+    jobs = args.job.split(",")
+
+    # perform analyze job first if requested
+    if "analyze" in jobs:
         obj = DataReducer(config)
         obj.main(output)
+        jobs = [j for j in jobs if j != "analyze"]
 
-    if args.job == "position":
-        obj = ShockPositionModel(config)
-        obj.main(output)
-        print("shock_position = [{:20.12e}, {:20.12e}]".format(*obj.get_position()))
+    # check prerequisite for remaining jobs
+    if len(jobs) > 0:
+        obj = DataReducer(config)
+        filename = obj.get_filename(output, ".h5")
+        if not os.path.exists(filename):
+            sys.exit("Error: File '{}' not found. Please run 'analyze' job first.".format(filename))
 
-    if args.job == "plot":
-        obj = DataPlotter(config)
-        obj.main(output)
+    # perform remaining jobs
+    for job in jobs:
+        if job == "position":
+            obj = ShockPositionModel(config)
+            obj.main(output)
+            print("shock_position = [{:20.12e}, {:20.12e}]".format(*obj.get_position()))
+
+        elif job == "plot":
+            obj = DataPlotter(config)
+            obj.main(output)
+
+        else:
+            raise ValueError("Unknown job: {:s}".format(job))
 
 
 if __name__ == "__main__":
