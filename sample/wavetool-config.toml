@@ -1,0 +1,15 @@
+dirname = "wavetool"
+profile = "data/profile.msgpack"
+overwrite = true
+
+[analyze]
+num_average = 4
+num_xwindow = 1024
+step_min = 1000000
+x_offset = -80
+shock_position = [  7.233730879350e-03,  -7.502691214380e+01]
+
+[plot]
+fps = 10
+quantity = "field"
+

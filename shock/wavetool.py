@@ -55,9 +55,12 @@ class DataAnalyzer(base.JobExecutor):
         num_average = self.options.get("num_average", 4)
         num_xwindow = self.options.get("num_xwindow", 2048)
         step_min = self.options.get("step_min", 0)
-        step_max = self.options.get("step_max", 2**31)
+        step_max = self.options.get("step_max", sys.maxsize)
         x_offset = self.options.get("x_offset", -80)
-        shock_position = self.options.get("shock_position", [1.66365906e-02, -1.39911575e02])
+
+        if "shock_position" not in self.options:
+            sys.exit("Error: 'shock_position' is required in options.")
+        shock_position = self.options["shock_position"]
 
         method = self.options.get("method", "thread")
         run = picnix.Run(profile, config=config, method=method)
@@ -168,7 +171,7 @@ class SummaryPlotter(base.JobExecutor):
         output = self.options.get("output", "wavetool")
 
         step_min = self.options.get("step_min", 0)
-        step_max = self.options.get("step_max", 2**31)
+        step_max = self.options.get("step_max", sys.maxsize)
 
         # read parameters here
         with h5py.File(filename, "r") as fp:
@@ -391,21 +394,35 @@ def main():
         "--job",
         type=str,
         default="analyze",
-        help="Type of job to perform (analyze, plot)",
+        help="Type of job to perform (analyze, plot). Can be combined with comma.",
     )
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
     config = args.config[0]
     output = args.output
 
-    # perform the job
-    if args.job == "analyze":
+    jobs = args.job.split(",")
+
+    # perform analyze job first if requested
+    if "analyze" in jobs:
         obj = DataAnalyzer(config)
         obj.main(output)
+        jobs = [j for j in jobs if j != "analyze"]
 
-    if args.job == "plot":
-        obj = SummaryPlotter(config)
-        obj.main(output)
+    # check prerequisite for remaining jobs
+    if len(jobs) > 0:
+        obj = DataAnalyzer(config)
+        filename = obj.get_filename(output, ".h5")
+        if not os.path.exists(filename):
+            sys.exit("Error: File '{}' not found. Please run 'analyze' job first.".format(filename))
+
+    # perform remaining jobs
+    for job in jobs:
+        if job == "plot":
+            obj = SummaryPlotter(config)
+            obj.main(output)
+        else:
+            raise ValueError("Unknown job: {:s}".format(job))
 
 
 if __name__ == "__main__":

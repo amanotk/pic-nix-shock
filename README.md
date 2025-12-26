@@ -32,13 +32,35 @@ $ python shock/reduce1d.py [options] config_file
 #### Examples
 - Perform data reduction only:
   ```bash
-  $ python shock/reduce1d.py -j analyze config.toml
+  $ python shock/reduce1d.py -j analyze reduce1d-config.toml
   ```
 - Perform data reduction and then plotting:
   ```bash
-  $ python shock/reduce1d.py -j analyze,plot config.toml
+  $ python shock/reduce1d.py -j analyze,plot reduce1d-config.toml
   ```
 - Calculate shock position only (requires existing HDF5 file):
   ```bash
-  $ python shock/reduce1d.py -j position config.toml
+  $ python shock/reduce1d.py -j position reduce1d-config.toml
+  ```
+
+### Field Data Plot in 2D `wavetool.py`
+The script `wavetool.py` extracts 2D field or current data, transforms it into the shock rest frame, and generates animations.
+
+#### Usage
+```bash
+$ python shock/wavetool.py [options] config_file
+```
+
+#### Options
+- `-o`, `--output`: Basename for output files (default: `wavetool`).
+- `-j`, `--job`: Type of job to perform. Available jobs are `analyze`, `plot`. Multiple jobs can be specified separated by commas (e.g., `analyze,plot`).
+
+#### Jobs
+- `analyze`: Reads raw simulation data, performs spatial averaging, transforms coordinates to the shock rest frame, and saves to an HDF5 file (`<output>.h5`). **Note**: This job requires `shock_position` to be defined in the configuration or options.
+- `plot`: Generates 2D plots (PNG) and a movie (MP4) from the analyzed data.
+
+#### Examples
+- Perform analysis and plotting:
+  ```bash
+  $ python shock/wavetool.py -j analyze,plot wavetool-config.toml
   ```
