@@ -50,7 +50,8 @@ class DataReducer(base.JobExecutor):
         field_step = run.get_step("field")
         common_step = np.intersect1d(particle_step, field_step)
         step_min = self.options.get("step_min", 0)
-        step_max = self.options.get("step_max", common_step[-1])
+        step_max = self.options.get("step_max", sys.maxsize)
+        step_max = min(step_max, common_step[-1])
         index_min = np.searchsorted(common_step, step_min)
         index_end = np.searchsorted(common_step, step_max)
         index_range = np.arange(index_min, index_end + 1)
@@ -222,6 +223,11 @@ class ShockPositionModel(base.JobExecutor):
 
         self.poly = poly
 
+        # save result to toml file
+        filename = self.get_filename(basename, "_result.toml")
+        with open(filename, "w") as fp:
+            fp.write("shock_position = [{:20.12e}, {:20.12e}]\n".format(*self.poly))
+
     def get_position(self):
         return self.poly
 
@@ -293,6 +299,9 @@ class DataPlotter(base.JobExecutor):
             # make plots
             wci = np.sqrt(sigma) / mime
             for i in tqdm.tqdm(range(step.shape[0])):
+                if step[i] < 0:
+                    continue  # skip invalid step
+
                 fe_ke = fp["Feu"][i, ..., 3]
                 pbinc, f_mom = self.convert_to_momentum_spectrum(ebinc, fe_ke)
                 pbine = np.sqrt((ebine + 1) ** 2 - 1)
