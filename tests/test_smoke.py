@@ -22,6 +22,7 @@ def test_imports():
     import shock.reduce1d  # noqa: F401
     import shock.wavetool  # noqa: F401
     import shock.mra  # noqa: F401
+
     try:
         import shock.vdist  # noqa: F401
     except RuntimeError as exc:
