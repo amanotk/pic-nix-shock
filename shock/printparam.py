@@ -193,6 +193,10 @@ def main(dirs, time=None):
             read_and_print_config(dirname, time)
 
 
-if __name__ == "__main__":
+def cli_main():
     args = parse_args()
     main(args.dirs, args.time)
+
+
+if __name__ == "__main__":
+    cli_main()
