@@ -1,0 +1,18 @@
+documentation:
+  - changed-files:
+      - any-glob-to: "*.md"
+      - any-glob-to: "docs/**"
+
+testing:
+  - changed-files:
+      - any-glob-to: "tests/**"
+      - any-glob-to: "pytest.ini"
+
+dependencies:
+  - changed-files:
+      - any-glob-to: "requirements*.txt"
+      - any-glob-to: "pyproject.toml"
+
+ci:
+  - changed-files:
+      - any-glob-to: ".github/**"
