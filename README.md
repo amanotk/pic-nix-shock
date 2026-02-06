@@ -28,8 +28,8 @@ pip install -e ".[mpi]"
 ### For Development
 
 ```bash
-pip install -e ".[dev]"
-pre-commit install
+pip install -e .
+pip install pytest ruff pre-commit
 ```
 
 ## Dependencies
@@ -74,25 +74,21 @@ python shock/vdist.py -j reduce config.toml
 
 ## Documentation
 
-- [Installation Guide](docs/installation.md)
-- [Configuration Reference](docs/configuration.md)
-- [API Documentation](docs/api.md)
-- [Contributing Guide](CONTRIBUTING.md)
+- [Configuration Reference](CONFIGURATION.md)
 
 ## Development
 
 ### Running Tests
 
 ```bash
-pytest tests/ -v
-pytest tests/ --cov=shock --cov-report=term-missing
+pytest tests/ -q
 ```
 
 ### Code Quality
 
 ```bash
-black shock/ tests/
 ruff check shock/ tests/
+ruff format shock/ tests/
 pre-commit run --all-files
 ```
 
