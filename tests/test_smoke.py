@@ -18,10 +18,10 @@ def test_imports():
 
     import shock  # noqa: F401
     import shock.base  # noqa: F401
-    import shock.utils  # noqa: F401
-    import shock.reduce1d  # noqa: F401
-    import shock.wavetool  # noqa: F401
     import shock.mra  # noqa: F401
+    import shock.reduce1d  # noqa: F401
+    import shock.utils  # noqa: F401
+    import shock.wavetool  # noqa: F401
 
     try:
         import shock.vdist  # noqa: F401

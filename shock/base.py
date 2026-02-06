@@ -1,10 +1,9 @@
-import os
-import toml
 import json
+import os
+
 import msgpack
-import pathlib
 import numpy as np
-import matplotlib as mpl
+import toml
 
 
 class JobExecutor:

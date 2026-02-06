@@ -15,8 +15,7 @@ import tqdm
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 try:
-    from . import base
-    from . import utils
+    from . import base, utils
 except ImportError:
     import base
     import utils

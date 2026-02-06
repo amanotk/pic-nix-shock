@@ -1,21 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import concurrent.futures
 import os
-import sys
 import pathlib
 import pickle
-import h5py
-import msgpack
-import toml
-import json
-import concurrent.futures
-from mpi4py import MPI
-from mpi4py.futures import MPICommExecutor
+import sys
 
+import h5py
+import matplotlib as mpl
 import numpy as np
 import scipy.ndimage as ndimage
-import matplotlib as mpl
+from mpi4py import MPI
+from mpi4py.futures import MPICommExecutor
 
 mpl.use("Agg") if __name__ == "__main__" else None
 import matplotlib.pyplot as plt
@@ -28,8 +25,7 @@ if "PICNIX_DIR" in os.environ:
 import picnix
 
 try:
-    from . import base
-    from . import utils
+    from . import base, utils
 except ImportError:
     import base
     import utils
