@@ -1,0 +1,12 @@
+# Minimal configuration for testing
+dirname = "test_output"
+profile = "test_profile.msgpack"
+overwrite = true
+
+[analyze]
+step_min = 0
+step_max = 100
+Nbinx = 64
+
+[plot]
+panels = ["E", "B"]
