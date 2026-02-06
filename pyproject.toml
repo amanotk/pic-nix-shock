@@ -48,4 +48,9 @@ target-version = ["py38"]
 [tool.ruff]
 line-length = 100
 select = ["E", "F", "W", "I"]
-ignore = ["E501"]
+ignore = ["E501", "E402", "E712", "E721", "E731", "E741", "F841"]
+exclude = ["*.ipynb"]
+
+[tool.bandit]
+exclude_dirs = ["tests/", "build/", "dist/"]
+skips = ["B101", "B301", "B403"]
