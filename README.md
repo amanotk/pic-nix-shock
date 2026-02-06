@@ -1,66 +1,98 @@
 # Analysis Tools for PIC Simulations of Collisionless Shocks
 
-## Tips
-To merge the content of this repository with an existing directory, you can do as follows (at your own risk):
-```
-$ git init
-$ git branch -m main
-$ git remote add origin git@github.com:amanotk/pic-nix-shock.git
-$ git fetch
-$ git merge origin/main --allow-unrelated-histories
-$ git branch --set-upstream-to=origin/main main
-```
+[![CI](https://github.com/amanotk/pic-nix-shock/actions/workflows/ci.yml/badge.svg)](https://github.com/amanotk/pic-nix-shock/actions)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-## Description
-### Data Reduction to 1D `reduce1d.py`
-The script `reduce1d.py` reduces simulation data to 1D profiles by averaging over the transverse direction.
+## Overview
 
-#### Usage
+This package provides analysis tools for Particle-In-Cell (PIC) simulations of
+collisionless shocks. It includes scripts for data reduction, wave analysis,
+velocity distribution computation, and visualization.
+
+## Installation
+
+### From Source
+
 ```bash
-$ python shock/reduce1d.py [options] config_file
+git clone https://github.com/amanotk/pic-nix-shock.git
+cd pic-nix-shock
+pip install -e .
 ```
 
-#### Options
-- `-o`, `--output`: Basename for output files (default: `reduce1d`).
-- `-j`, `--job`: Type of job to perform. Available jobs are `analyze`, `position`, `plot`. Multiple jobs can be specified separated by commas (e.g., `analyze,plot`).
+### With MPI Support
 
-#### Jobs
-- `analyze`: Reads raw simulation data, performs reduction/binning, and saves to an HDF5 file (`<output>.h5`).
-- `position`: Calculates the shock position based on the reduced data.
-- `plot`: Generates plots (PNG) and a movie (MP4) from the reduced data.
-
-#### Examples
-- Perform data reduction only:
-  ```bash
-  $ python shock/reduce1d.py -j analyze reduce1d-config.toml
-  ```
-- Perform data reduction and then plotting:
-  ```bash
-  $ python shock/reduce1d.py -j analyze,plot reduce1d-config.toml
-  ```
-- Calculate shock position only (requires existing HDF5 file):
-  ```bash
-  $ python shock/reduce1d.py -j position reduce1d-config.toml
-  ```
-
-### Field Data Plot in 2D `wavetool.py`
-The script `wavetool.py` extracts 2D field or current data, transforms it into the shock rest frame, and generates animations.
-
-#### Usage
 ```bash
-$ python shock/wavetool.py [options] config_file
+pip install -e ".[mpi]"
 ```
 
-#### Options
-- `-o`, `--output`: Basename for output files (default: `wavetool`).
-- `-j`, `--job`: Type of job to perform. Available jobs are `analyze`, `plot`. Multiple jobs can be specified separated by commas (e.g., `analyze,plot`).
+### For Development
 
-#### Jobs
-- `analyze`: Reads raw simulation data, performs spatial averaging, transforms coordinates to the shock rest frame, and saves to an HDF5 file (`<output>.h5`). **Note**: This job requires `shock_position` to be defined in the configuration or options.
-- `plot`: Generates 2D plots (PNG) and a movie (MP4) from the analyzed data.
+```bash
+pip install -e .
+pip install pytest ruff pre-commit
+```
 
-#### Examples
-- Perform analysis and plotting:
-  ```bash
-  $ python shock/wavetool.py -j analyze,plot wavetool-config.toml
-  ```
+## Dependencies
+
+Required:
+
+- Python >= 3.8
+- NumPy >= 1.20
+- SciPy >= 1.7
+- Matplotlib >= 3.4
+- h5py >= 3.0
+- toml >= 0.10
+- msgpack >= 1.0
+- tqdm >= 4.60
+- PyWavelets >= 1.1
+
+Optional:
+
+- mpi4py >= 3.0 (for MPI workflows)
+
+## Quick Start
+
+### Reduce simulation data to 1D profiles
+
+```bash
+python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
+python shock/reduce1d.py -j plot sample/reduce1d-config.toml
+```
+
+### Analyze 2D field data
+
+```bash
+python shock/wavetool.py -j analyze sample/wavetool-config.toml
+python shock/wavetool.py -j plot sample/wavetool-config.toml
+```
+
+### Compute velocity distributions
+
+```bash
+python shock/vdist.py -j reduce config.toml
+```
+
+## Documentation
+
+- [Configuration Reference](CONFIGURATION.md)
+
+## Development
+
+### Running Tests
+
+```bash
+pytest tests/ -q
+```
+
+### Code Quality
+
+```bash
+ruff check shock/ tests/
+ruff format shock/ tests/
+pre-commit run --all-files
+```
+
+## Notes
+
+- The `picnix` module is required to process real simulation outputs.
+- Set `PICNIX_DIR` to your local PIC-NIX installation when needed.

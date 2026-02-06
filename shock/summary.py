@@ -2,9 +2,8 @@
 
 import matplotlib as mpl
 import numpy as np
-from matplotlib import pyplot as plt
-
 import picnix
+from matplotlib import pyplot as plt
 
 
 def calc_particle_histogram(run, step, species, xbin, ubin, ebin):

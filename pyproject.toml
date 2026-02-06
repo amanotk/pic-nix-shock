@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shock2d"
+version = "0.1.0"
+description = "Analysis Tools for PIC Simulations of Collisionless Shocks"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.20",
+    "scipy>=1.7",
+    "matplotlib>=3.4",
+    "h5py>=3.0",
+    "toml>=0.10",
+    "msgpack>=1.0",
+    "tqdm>=4.60",
+    "PyWavelets>=1.1",
+]
+
+[project.optional-dependencies]
+mpi = ["mpi4py>=3.0"]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+reduce1d = "shock.reduce1d:main"
+wavetool = "shock.wavetool:main"
+mra = "shock.mra:main"
+vdist = "shock.vdist:main"
+printparam = "shock.printparam:cli_main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["shock*"]
+
+[tool.ruff]
+line-length = 100
+exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "E402", "E712", "E721", "E731", "E741", "F841"]
