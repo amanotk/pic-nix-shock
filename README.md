@@ -106,6 +106,12 @@ python shock/wavetool.py -j analyze sample/wavetool-config.toml
 python shock/wavetool.py -j plot sample/wavetool-config.toml
 ```
 
+### Analyze wave activity (high-pass filter)
+
+```bash
+python shock/waveactivity.py -j analyze,plot sample/waveactivity-config.toml
+```
+
 ### Compute velocity distributions
 
 ```bash
