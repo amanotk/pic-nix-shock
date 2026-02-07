@@ -19,12 +19,16 @@ Use `uv` as the default workflow:
 ```bash
 git clone https://github.com/amanotk/pic-nix-shock.git
 cd pic-nix-shock
-uv sync
+bash scripts/setup.sh
 ```
 
-Fallback (if `uv` is unavailable):
+If `uv` is unavailable, `scripts/setup.sh` falls back to a local `.venv` + `pip install -e .` automatically.
+
+Manual fallback (if you prefer not to use the setup script):
 
 ```bash
+git clone https://github.com/amanotk/pic-nix-shock.git
+cd pic-nix-shock
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -35,6 +39,12 @@ With MPI support (fallback pip path):
 ```bash
 pip install -e ".[mpi]"
 ```
+
+**Setup script** (`scripts/setup.sh`):
+- Creates the `work/` directory if it doesn't exist
+- Sets up `.shock.env` from example (if not already present)
+- Syncs the Python environment with `uv sync` (or pip fallback when `uv` is missing)
+- Run once after cloning or pulling
 
 ## Environment Variables and Local Runtime Settings
 
