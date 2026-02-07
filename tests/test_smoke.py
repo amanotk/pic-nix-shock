@@ -25,6 +25,9 @@ def test_imports():
 
     try:
         import shock.vdist  # noqa: F401
+    except ModuleNotFoundError as exc:
+        if exc.name != "mpi4py":
+            raise
     except RuntimeError as exc:
         if "cannot load MPI library" not in str(exc):
             raise
