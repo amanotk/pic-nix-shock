@@ -34,6 +34,7 @@ printparam = "shock.printparam:cli_main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["shock*"]
+exclude = ["data*", "work*", ".*"]
 
 [tool.ruff]
 line-length = 100
