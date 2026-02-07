@@ -19,12 +19,16 @@ Use `uv` as the default workflow:
 ```bash
 git clone https://github.com/amanotk/pic-nix-shock.git
 cd pic-nix-shock
-uv sync
+bash scripts/setup.sh
 ```
 
-Fallback (if `uv` is unavailable):
+If `uv` is unavailable, `scripts/setup.sh` falls back to a local `.venv` + `pip install -e .` automatically.
+
+Manual fallback (if you prefer not to use the setup script):
 
 ```bash
+git clone https://github.com/amanotk/pic-nix-shock.git
+cd pic-nix-shock
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -35,6 +39,12 @@ With MPI support (fallback pip path):
 ```bash
 pip install -e ".[mpi]"
 ```
+
+**Setup script** (`scripts/setup.sh`):
+- Creates the `work/` directory if it doesn't exist
+- Sets up `.shock.env` from example (if not already present)
+- Syncs the Python environment with `uv sync` (or pip fallback when `uv` is missing)
+- Run once after cloning or pulling
 
 ## Environment Variables and Local Runtime Settings
 
@@ -69,7 +79,7 @@ SHOCK_WORK_ROOT=work
 #SBATCH -J shock-reduce
 #SBATCH -t 01:00:00
 
-cd /path/to/shock2d
+cd /path/to/shock
 export SHOCK_DATA_ROOT=/path/to/sim-data
 export SHOCK_WORK_ROOT=work
 
@@ -83,7 +93,7 @@ uv run python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
 #PJM -N "shock-reduce"
 #PJM -L "elapse=01:00:00"
 
-cd /path/to/shock2d
+cd /path/to/shock
 export SHOCK_DATA_ROOT=/path/to/sim-data
 export SHOCK_WORK_ROOT=work
 
