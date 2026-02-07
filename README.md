@@ -9,6 +9,9 @@ This package provides analysis tools for Particle-In-Cell (PIC) simulations of
 collisionless shocks. It includes scripts for data reduction, wave analysis,
 velocity distribution computation, and visualization.
 
+These tools are intended to analyze simulation outputs produced by PIC-NIX:
+https://github.com/amanotk/pic-nix/
+
 ## Installation
 
 Use `uv` as the default workflow:
