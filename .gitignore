@@ -67,6 +67,7 @@ coverage.xml
 Thumbs.db
 
 .shock.env
+work
 work/*
 !work/.gitkeep
 .venv/
