@@ -5,13 +5,15 @@ All scripts use TOML configuration files.
 ## Common Keys
 
 ```toml
+run = "run1"
 dirname = "output_directory"
-profile = "path/to/profile.msgpack"
+profile = "data/profile.msgpack"
 overwrite = true
 ```
 
-- `dirname`: Output directory
-- `profile`: Simulation profile file path
+- `run`: Run directory name (or subpath) under `SHOCK_DATA_ROOT`
+- `dirname`: Output directory under `SHOCK_WORK_ROOT/run`
+- `profile`: Profile path relative to `run` (default: `data/profile.msgpack`)
 - `overwrite`: Whether existing outputs may be overwritten
 
 ## `reduce1d.py`
@@ -19,8 +21,8 @@ overwrite = true
 Example: `sample/reduce1d-config.toml`
 
 ```toml
+run = "run1"
 dirname = "reduce1d"
-profile = "profile.msgpack"
 method = "async"
 overwrite = true
 
@@ -46,8 +48,8 @@ fit_range = [5.0, 16.0]
 Example: `sample/wavetool-config.toml`
 
 ```toml
+run = "run1"
 dirname = "wavetool"
-profile = "profile.msgpack"
 overwrite = true
 
 [analyze]
@@ -65,8 +67,8 @@ quantity = "field"
 ## `vdist.py`
 
 ```toml
+run = "run1"
 dirname = "vdist"
-profile = "profile.msgpack"
 overwrite = true
 
 [reduce]
@@ -78,8 +80,8 @@ upara_nbins = 80
 ## `mra.py`
 
 ```toml
+run = "run1"
 dirname = "mra"
-profile = "profile.msgpack"
 overwrite = true
 
 [analyze]
@@ -88,6 +90,9 @@ mrafile = "mra"
 ```
 
 ## Environment Variables
+
+- `SHOCK_DATA_ROOT` default: `./data`
+- `SHOCK_WORK_ROOT` default: `./work`
 
 ```bash
 export PICNIX_DIR=/path/to/picnix

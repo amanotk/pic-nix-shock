@@ -44,8 +44,8 @@ This document is based only on files currently tracked by git.
 ### Local env file and path behavior
 
 - The runtime may auto-load a repo-root `.shock.env` (or file pointed by `SHOCK_ENV_FILE`).
-- `SHOCK_WORK_ROOT` defaults to `work` and is used as base for relative `dirname` values in configs.
-- `SHOCK_DATA_ROOT` is optional metadata/convention only; profile paths are still specified explicitly per run.
+- `SHOCK_WORK_ROOT` defaults to `./work`; outputs are written under `SHOCK_WORK_ROOT/run/dirname`.
+- `SHOCK_DATA_ROOT` defaults to `./data`; profile is resolved as `SHOCK_DATA_ROOT/run/profile` (default profile is `data/profile.msgpack`).
 
 ## Build / Lint / Test Commands
 

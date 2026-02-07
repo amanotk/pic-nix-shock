@@ -4,6 +4,7 @@
 *.png
 *.mp4
 *.h5
+*.out
 __pycache__
 
 # Python
@@ -70,4 +71,7 @@ Thumbs.db
 work
 work/*
 !work/.gitkeep
+data
+data/*
+!data/.gitkeep
 .venv/

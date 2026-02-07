@@ -46,12 +46,30 @@ pip install -e ".[mpi]"
 - Syncs the Python environment with `uv sync` (or pip fallback when `uv` is missing)
 - Run once after cloning or pulling
 
+## Directory Structure Contract
+
+All analysis configs share these top-level keys:
+
+- `run`: directory name (or subpath) under `SHOCK_DATA_ROOT` (required)
+- `profile`: profile path relative to `run` (default: `data/profile.msgpack`)
+- `dirname`: output directory under `SHOCK_WORK_ROOT/run` (required)
+
+For example, with `run = "campaignA/run2"` and `dirname = "reduce1d"`:
+
+- Input profile: `SHOCK_DATA_ROOT/campaignA/run2/data/profile.msgpack`
+- Outputs: `SHOCK_WORK_ROOT/campaignA/run2/reduce1d/...`
+
+The sample configs in `sample/` use `run = "run1"`, so they expect:
+
+- Input profile at `SHOCK_DATA_ROOT/run1/data/profile.msgpack`
+- Outputs under `SHOCK_WORK_ROOT/run1/...`
+
 ## Environment Variables and Local Runtime Settings
 
-- `SHOCK_WORK_ROOT`: base directory for relative `dirname` output paths.
-  - default: `work`
-- `SHOCK_DATA_ROOT`: optional user metadata/convention for where simulation run directories live.
-  - profile paths are still selected explicitly per run/config.
+- `SHOCK_WORK_ROOT`: base directory for run-scoped output paths.
+  - default: `./work`
+- `SHOCK_DATA_ROOT`: base directory where run directories are stored.
+  - default: `./data`
 - `SHOCK_ENV_FILE`: optional path to an env file to auto-load.
   - if unset, runtime auto-loads repo-root `.shock.env` when present.
 
@@ -66,8 +84,8 @@ cp .shock.env.example .shock.env
 Example `.shock.env`:
 
 ```bash
-SHOCK_DATA_ROOT=/path/to/simulation-runs
-SHOCK_WORK_ROOT=work
+SHOCK_DATA_ROOT=./data
+SHOCK_WORK_ROOT=./work
 ```
 
 ## Batch Scheduler Usage
@@ -81,7 +99,7 @@ SHOCK_WORK_ROOT=work
 
 cd /path/to/shock
 export SHOCK_DATA_ROOT=/path/to/sim-data
-export SHOCK_WORK_ROOT=work
+export SHOCK_WORK_ROOT=./work
 
 uv run python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
 ```
@@ -95,7 +113,7 @@ uv run python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
 
 cd /path/to/shock
 export SHOCK_DATA_ROOT=/path/to/sim-data
-export SHOCK_WORK_ROOT=work
+export SHOCK_WORK_ROOT=./work
 
 uv run python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
 ```
@@ -105,6 +123,7 @@ uv run python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
 ### Reduce simulation data to 1D profiles
 
 ```bash
+# sample config expects SHOCK_DATA_ROOT/run1/data/profile.msgpack
 python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
 python shock/reduce1d.py -j plot sample/reduce1d-config.toml
 ```
@@ -112,6 +131,7 @@ python shock/reduce1d.py -j plot sample/reduce1d-config.toml
 ### Analyze 2D field data
 
 ```bash
+# sample config expects SHOCK_DATA_ROOT/run1/data/profile.msgpack
 python shock/wavetool.py -j analyze sample/wavetool-config.toml
 python shock/wavetool.py -j plot sample/wavetool-config.toml
 ```

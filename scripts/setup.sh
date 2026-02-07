@@ -27,8 +27,8 @@ fi
 
 echo ""
 echo "Directory configuration (.shock.env):"
-echo "- Set SHOCK_WORK_ROOT (default: work)"
-echo "- Set SHOCK_DATA_ROOT to your simulation directory"
+echo "- Set SHOCK_WORK_ROOT (default: ./work)"
+echo "- Set SHOCK_DATA_ROOT (default: ./data)"
 echo "- Set PICNIX_DIR if you use local PIC-NIX scripts"
 
 # Sync uv environment
