@@ -1,5 +1,5 @@
+run = "run1"
 dirname = "reduce1d"
-profile = "data/profile.msgpack"
 method = "async"
 overwrite = true
 

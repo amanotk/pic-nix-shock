@@ -17,14 +17,12 @@ dependencies = [
     "msgpack>=1.0",
     "tqdm>=4.60",
     "PyWavelets>=1.1",
+    "pytest>=7.0",
+    "ruff>=0.1.0",
 ]
 
 [project.optional-dependencies]
 mpi = ["mpi4py>=3.0"]
-dev = [
-    "pytest>=7.0",
-    "ruff>=0.1.0",
-]
 
 [project.scripts]
 reduce1d = "shock.reduce1d:main"
@@ -36,6 +34,7 @@ printparam = "shock.printparam:cli_main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["shock*"]
+exclude = ["data*", "work*", ".*"]
 
 [tool.ruff]
 line-length = 100

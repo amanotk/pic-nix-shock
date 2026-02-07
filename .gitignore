@@ -4,6 +4,7 @@
 *.png
 *.mp4
 *.h5
+*.out
 __pycache__
 
 # Python
@@ -67,6 +68,10 @@ coverage.xml
 Thumbs.db
 
 .shock.env
+work
 work/*
 !work/.gitkeep
+data
+data/*
+!data/.gitkeep
 .venv/
