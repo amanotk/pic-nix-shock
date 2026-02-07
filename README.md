@@ -11,44 +11,81 @@ velocity distribution computation, and visualization.
 
 ## Installation
 
-### From Source
+Use `uv` as the default workflow:
 
 ```bash
 git clone https://github.com/amanotk/pic-nix-shock.git
 cd pic-nix-shock
+uv sync
+```
+
+Fallback (if `uv` is unavailable):
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -e .
 ```
 
-### With MPI Support
+With MPI support (fallback pip path):
 
 ```bash
 pip install -e ".[mpi]"
 ```
 
-### For Development
+## Environment Variables and Local Runtime Settings
+
+- `SHOCK_WORK_ROOT`: base directory for relative `dirname` output paths.
+  - default: `work`
+- `SHOCK_DATA_ROOT`: optional user metadata/convention for where simulation run directories live.
+  - profile paths are still selected explicitly per run/config.
+- `SHOCK_ENV_FILE`: optional path to an env file to auto-load.
+  - if unset, runtime auto-loads repo-root `.shock.env` when present.
+
+Runtime precedence is: exported shell/job vars > `.shock.env` values > defaults.
+
+Create local runtime settings (git-ignored):
 
 ```bash
-pip install -e .
-pip install pytest ruff pre-commit
+cp .shock.env.example .shock.env
 ```
 
-## Dependencies
+Example `.shock.env`:
 
-Required:
+```bash
+SHOCK_DATA_ROOT=/path/to/simulation-runs
+SHOCK_WORK_ROOT=work
+```
 
-- Python >= 3.8
-- NumPy >= 1.20
-- SciPy >= 1.7
-- Matplotlib >= 3.4
-- h5py >= 3.0
-- toml >= 0.10
-- msgpack >= 1.0
-- tqdm >= 4.60
-- PyWavelets >= 1.1
+## Batch Scheduler Usage
 
-Optional:
+### Slurm example
 
-- mpi4py >= 3.0 (for MPI workflows)
+```bash
+#!/bin/bash
+#SBATCH -J shock-reduce
+#SBATCH -t 01:00:00
+
+cd /path/to/shock2d
+export SHOCK_DATA_ROOT=/path/to/sim-data
+export SHOCK_WORK_ROOT=work
+
+uv run python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
+```
+
+### PJM / pjsub example
+
+```bash
+#!/bin/bash
+#PJM -N "shock-reduce"
+#PJM -L "elapse=01:00:00"
+
+cd /path/to/shock2d
+export SHOCK_DATA_ROOT=/path/to/sim-data
+export SHOCK_WORK_ROOT=work
+
+uv run python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
+```
 
 ## Quick Start
 
