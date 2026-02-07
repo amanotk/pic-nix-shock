@@ -24,7 +24,7 @@ def sample_config_path(root_dir):
 @pytest.fixture
 def temp_dir():
     """Temporary directory for test outputs."""
-    dirname = tempfile.mkdtemp(prefix="shock2d-test-")
+    dirname = tempfile.mkdtemp(prefix="shock-test-")
     try:
         yield Path(dirname)
     finally:

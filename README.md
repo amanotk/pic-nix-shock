@@ -69,7 +69,7 @@ SHOCK_WORK_ROOT=work
 #SBATCH -J shock-reduce
 #SBATCH -t 01:00:00
 
-cd /path/to/shock2d
+cd /path/to/shock
 export SHOCK_DATA_ROOT=/path/to/sim-data
 export SHOCK_WORK_ROOT=work
 
@@ -83,7 +83,7 @@ uv run python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
 #PJM -N "shock-reduce"
 #PJM -L "elapse=01:00:00"
 
-cd /path/to/shock2d
+cd /path/to/shock
 export SHOCK_DATA_ROOT=/path/to/sim-data
 export SHOCK_WORK_ROOT=work
 
