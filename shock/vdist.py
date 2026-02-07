@@ -1,21 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import concurrent.futures
 import os
-import sys
 import pathlib
 import pickle
-import h5py
-import msgpack
-import toml
-import json
-import concurrent.futures
-from mpi4py import MPI
-from mpi4py.futures import MPICommExecutor
+import sys
 
+import h5py
+import matplotlib as mpl
 import numpy as np
 import scipy.ndimage as ndimage
-import matplotlib as mpl
+from mpi4py import MPI
+from mpi4py.futures import MPICommExecutor
 
 mpl.use("Agg") if __name__ == "__main__" else None
 import matplotlib.pyplot as plt
@@ -26,8 +23,12 @@ plt.rcParams.update({"font.size": 12})
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 import picnix
-import base
-import utils
+
+try:
+    from . import base, utils
+except ImportError:
+    import base
+    import utils
 
 
 class DataReducer(base.JobExecutor):
@@ -70,9 +71,7 @@ class DataReducer(base.JobExecutor):
         step_min = self.options.get("step_min", 380000)
         step_max = self.options.get("step_max", 380000)
         x_offset = self.options.get("x_offset", -80)
-        shock_position = self.options.get(
-            "shock_position", [1.66365906e-02, -1.39911575e02]
-        )
+        shock_position = self.options.get("shock_position", [1.66365906e-02, -1.39911575e02])
 
         # binning parameters
         upara_nbins = self.options.get("upara_nbins", 80)
@@ -210,9 +209,7 @@ class DataReducer(base.JobExecutor):
                 fp.create_dataset(
                     "c_dist", (Nt, uperp_nbins, upara_nbins, My, Mx), dtype=np.float64
                 )
-                fp.create_dataset(
-                    "p_dist", (Nt, ucos_nbins, uabs_nbins, My, Mx), dtype=np.float64
-                )
+                fp.create_dataset("p_dist", (Nt, ucos_nbins, uabs_nbins, My, Mx), dtype=np.float64)
                 # bins
                 fp.create_dataset("x_bins", (Nt, Mx + 1), dtype=np.float64)
                 fp.create_dataset("y_bins", (Nt, My + 1), dtype=np.float64)
@@ -296,11 +293,7 @@ class DataReducer(base.JobExecutor):
             "uabs_bins",
             "ucos_bins",
         ]
-        mpi_vars = {
-            key: value
-            for key, value in self.worker_params.items()
-            if key in mpi_vars_keys
-        }
+        mpi_vars = {key: value for key, value in self.worker_params.items() if key in mpi_vars_keys}
 
         executor_args = dict()
         with MPICommExecutor(**executor_args) as executor:

@@ -12,4 +12,3 @@ shock_position = [  7.233730879350e-03,  -7.502691214380e+01]
 [plot]
 fps = 10
 quantity = "field"
-

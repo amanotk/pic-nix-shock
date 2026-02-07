@@ -1,66 +1,138 @@
 # Analysis Tools for PIC Simulations of Collisionless Shocks
 
-## Tips
-To merge the content of this repository with an existing directory, you can do as follows (at your own risk):
-```
-$ git init
-$ git branch -m main
-$ git remote add origin git@github.com:amanotk/pic-nix-shock.git
-$ git fetch
-$ git merge origin/main --allow-unrelated-histories
-$ git branch --set-upstream-to=origin/main main
-```
+[![CI](https://github.com/amanotk/pic-nix-shock/actions/workflows/ci.yml/badge.svg)](https://github.com/amanotk/pic-nix-shock/actions)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-## Description
-### Data Reduction to 1D `reduce1d.py`
-The script `reduce1d.py` reduces simulation data to 1D profiles by averaging over the transverse direction.
+## Overview
 
-#### Usage
+This package provides analysis tools for Particle-In-Cell (PIC) simulations of
+collisionless shocks. It includes scripts for data reduction, wave analysis,
+velocity distribution computation, and visualization.
+
+These tools are intended to analyze simulation outputs produced by PIC-NIX:
+https://github.com/amanotk/pic-nix/
+
+## Installation
+
+Use `uv` as the default workflow:
+
 ```bash
-$ python shock/reduce1d.py [options] config_file
+git clone https://github.com/amanotk/pic-nix-shock.git
+cd pic-nix-shock
+uv sync
 ```
 
-#### Options
-- `-o`, `--output`: Basename for output files (default: `reduce1d`).
-- `-j`, `--job`: Type of job to perform. Available jobs are `analyze`, `position`, `plot`. Multiple jobs can be specified separated by commas (e.g., `analyze,plot`).
+Fallback (if `uv` is unavailable):
 
-#### Jobs
-- `analyze`: Reads raw simulation data, performs reduction/binning, and saves to an HDF5 file (`<output>.h5`).
-- `position`: Calculates the shock position based on the reduced data.
-- `plot`: Generates plots (PNG) and a movie (MP4) from the reduced data.
-
-#### Examples
-- Perform data reduction only:
-  ```bash
-  $ python shock/reduce1d.py -j analyze reduce1d-config.toml
-  ```
-- Perform data reduction and then plotting:
-  ```bash
-  $ python shock/reduce1d.py -j analyze,plot reduce1d-config.toml
-  ```
-- Calculate shock position only (requires existing HDF5 file):
-  ```bash
-  $ python shock/reduce1d.py -j position reduce1d-config.toml
-  ```
-
-### Field Data Plot in 2D `wavetool.py`
-The script `wavetool.py` extracts 2D field or current data, transforms it into the shock rest frame, and generates animations.
-
-#### Usage
 ```bash
-$ python shock/wavetool.py [options] config_file
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
 
-#### Options
-- `-o`, `--output`: Basename for output files (default: `wavetool`).
-- `-j`, `--job`: Type of job to perform. Available jobs are `analyze`, `plot`. Multiple jobs can be specified separated by commas (e.g., `analyze,plot`).
+With MPI support (fallback pip path):
 
-#### Jobs
-- `analyze`: Reads raw simulation data, performs spatial averaging, transforms coordinates to the shock rest frame, and saves to an HDF5 file (`<output>.h5`). **Note**: This job requires `shock_position` to be defined in the configuration or options.
-- `plot`: Generates 2D plots (PNG) and a movie (MP4) from the analyzed data.
+```bash
+pip install -e ".[mpi]"
+```
 
-#### Examples
-- Perform analysis and plotting:
-  ```bash
-  $ python shock/wavetool.py -j analyze,plot wavetool-config.toml
-  ```
+## Environment Variables and Local Runtime Settings
+
+- `SHOCK_WORK_ROOT`: base directory for relative `dirname` output paths.
+  - default: `work`
+- `SHOCK_DATA_ROOT`: optional user metadata/convention for where simulation run directories live.
+  - profile paths are still selected explicitly per run/config.
+- `SHOCK_ENV_FILE`: optional path to an env file to auto-load.
+  - if unset, runtime auto-loads repo-root `.shock.env` when present.
+
+Runtime precedence is: exported shell/job vars > `.shock.env` values > defaults.
+
+Create local runtime settings (git-ignored):
+
+```bash
+cp .shock.env.example .shock.env
+```
+
+Example `.shock.env`:
+
+```bash
+SHOCK_DATA_ROOT=/path/to/simulation-runs
+SHOCK_WORK_ROOT=work
+```
+
+## Batch Scheduler Usage
+
+### Slurm example
+
+```bash
+#!/bin/bash
+#SBATCH -J shock-reduce
+#SBATCH -t 01:00:00
+
+cd /path/to/shock2d
+export SHOCK_DATA_ROOT=/path/to/sim-data
+export SHOCK_WORK_ROOT=work
+
+uv run python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
+```
+
+### PJM / pjsub example
+
+```bash
+#!/bin/bash
+#PJM -N "shock-reduce"
+#PJM -L "elapse=01:00:00"
+
+cd /path/to/shock2d
+export SHOCK_DATA_ROOT=/path/to/sim-data
+export SHOCK_WORK_ROOT=work
+
+uv run python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
+```
+
+## Quick Start
+
+### Reduce simulation data to 1D profiles
+
+```bash
+python shock/reduce1d.py -j analyze sample/reduce1d-config.toml
+python shock/reduce1d.py -j plot sample/reduce1d-config.toml
+```
+
+### Analyze 2D field data
+
+```bash
+python shock/wavetool.py -j analyze sample/wavetool-config.toml
+python shock/wavetool.py -j plot sample/wavetool-config.toml
+```
+
+### Compute velocity distributions
+
+```bash
+python shock/vdist.py -j reduce config.toml
+```
+
+## Documentation
+
+- [Configuration Reference](CONFIGURATION.md)
+
+## Development
+
+### Running Tests
+
+```bash
+pytest tests/ -q
+```
+
+### Code Quality
+
+```bash
+ruff check shock/ tests/
+ruff format shock/ tests/
+pre-commit run --all-files
+```
+
+## Notes
+
+- The `picnix` module is required to process real simulation outputs.
+- Set `PICNIX_DIR` to your local PIC-NIX installation when needed.

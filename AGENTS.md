@@ -8,7 +8,7 @@ This document is based only on files currently tracked by git.
 - Primary code lives in `shock/`.
 - Primary docs live in `README.md`.
 - Example runtime configs live in `sample/*.toml`.
-- No tracked `pyproject.toml`, `setup.py`, `requirements.txt`, `tox.ini`, or CI workflow files were found.
+- Packaging metadata is tracked in `pyproject.toml`.
 
 ## Agent Scope
 
@@ -25,10 +25,18 @@ This document is based only on files currently tracked by git.
 ## Runtime and Dependency Assumptions
 
 - Codebase is Python-first and script-oriented.
+- Preferred environment manager is `uv` (`uv sync`, `uv run ...`).
+- `pip` workflows remain acceptable fallback on systems where `uv` is unavailable.
 - Typical dependencies inferred from imports:
   - `numpy`, `scipy`, `matplotlib`, `h5py`, `toml`, `msgpack`, `tqdm`, `pywt`, `mpi4py`.
   - Domain dependency: `picnix` (imported as a Python module, and sometimes via `PICNIX_DIR/script` on `sys.path`).
 - Some scripts use MPI (`shock/vdist.py`) and may need `mpiexec`.
+
+### Local env file and path behavior
+
+- The runtime may auto-load a repo-root `.shock.env` (or file pointed by `SHOCK_ENV_FILE`).
+- `SHOCK_WORK_ROOT` defaults to `work` and is used as base for relative `dirname` values in configs.
+- `SHOCK_DATA_ROOT` is optional metadata/convention only; profile paths are still specified explicitly per run.
 
 ## Build / Lint / Test Commands
 
@@ -37,6 +45,8 @@ Use the following practical commands for validation.
 
 ### Environment smoke checks
 
+- Sync environment (preferred):
+  - `uv sync`
 - Check Python version:
   - `python --version`
 - Verify key imports:
