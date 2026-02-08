@@ -2,7 +2,7 @@
 
 ## Electric field from Ohm’s law
 
-The generalized Ohm’s law may be written quite generally in the following form:
+The generalized Ohm’s law may be written quite generally in the following form (see [1]):
 
 ```math
 (\Lambda + c^2 \nabla \times \nabla \times) \mathbf{E} = -\frac{\Gamma}{c} \times \mathbf{B} + \nabla \cdot \Pi.
@@ -63,4 +63,8 @@ Clearly, these transformed moments are related to $\Lambda, \Gamma, \Pi$ as foll
 \end{pmatrix}.
 \end{aligned}
 ```
-from which the electric field may be obtained by using the generalized Ohm’s law.
+from which the electric field may be obtained by using the generalized Ohm’s law [1].
+
+## Reference
+
+[1] Amano, T. (2018). A generalized quasi-neutral fluid-particle hybrid plasma model and its application to energetic-particle-magnetohydrodynamics hybrid simulation. *Journal of Computational Physics, 366*, 366-385. https://doi.org/10.1016/j.jcp.2018.04.020
