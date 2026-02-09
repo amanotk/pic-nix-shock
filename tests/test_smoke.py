@@ -21,6 +21,7 @@ def test_imports():
     import shock.mra  # noqa: F401
     import shock.reduce1d  # noqa: F401
     import shock.utils  # noqa: F401
+    import shock.wavefilter  # noqa: F401
     import shock.wavetool  # noqa: F401
 
     try:
@@ -49,6 +50,7 @@ def test_cli_help(root_dir, tmp_path):
     scripts = [
         root_dir / "shock" / "reduce1d.py",
         root_dir / "shock" / "wavetool.py",
+        root_dir / "shock" / "wavefilter.py",
         root_dir / "shock" / "mra.py",
     ]
 

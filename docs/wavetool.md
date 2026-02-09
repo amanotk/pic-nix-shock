@@ -8,13 +8,15 @@ The generalized Ohm’s law may be written quite generally in the following form
 (\Lambda + c^2 \nabla \times \nabla \times) \mathbf{E} = -\frac{\Gamma}{c} \times \mathbf{B} + \nabla \cdot \Pi.
 ```
 
+In this project we use Lorentz-Heaviside units, so explicit `4\pi` factors are not included.
+
 The quantities $\Lambda, \Gamma, \Pi$ appearing in the above equation are defined as follows:
 
 ```math
 \begin{aligned}
-\Lambda &= \sum_{s} \frac{4\pi q_s^2}{m_s} \int f_s d\mathbf{v}, \\
-\Gamma &= \sum_{s} \frac{4\pi q_s^2}{m_s} \int \mathbf{v} f_s d\mathbf{v}, \\
-\Pi &= \sum_{s} 4\pi q_s \int \mathbf{v} \mathbf{v} f_s d\mathbf{v}.
+\Lambda &= \sum_{s} \frac{q_s^2}{m_s} \int f_s d\mathbf{v}, \\
+\Gamma &= \sum_{s} \frac{q_s^2}{m_s} \int \mathbf{v} f_s d\mathbf{v}, \\
+\Pi &= \sum_{s} q_s \int \mathbf{v} \mathbf{v} f_s d\mathbf{v}.
 \end{aligned}
 ```
 

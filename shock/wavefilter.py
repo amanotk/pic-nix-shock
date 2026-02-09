@@ -31,7 +31,7 @@ def highpass(x, fs, fc, order=4):
     return signal.filtfilt(b, a, x, axis=0)
 
 
-class WaveActivityAnalyzer(base.JobExecutor):
+class WaveFilterAnalyzer(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
         if "analyze" in self.options:
@@ -43,7 +43,7 @@ class WaveActivityAnalyzer(base.JobExecutor):
 
     def main(self):
         rawfile = self.get_filename(self.options.get("rawfile", "wavetool"), ".h5")
-        wavefile = self.get_filename(self.options.get("wavefile", "waveactivity"), ".h5")
+        wavefile = self.get_filename(self.options.get("wavefile", "wavefilter"), ".h5")
         self.apply_filter_and_save(rawfile, wavefile)
 
     def apply_filter_and_save(self, rawfile, wavefile):
@@ -58,9 +58,11 @@ class WaveActivityAnalyzer(base.JobExecutor):
 
         with h5py.File(rawfile, "r") as fp_in:
             B = fp_in["B"][()]
-            E = fp_in["E"][()]
-            Je = fp_in["Je"][()]
-            Ji = fp_in["Ji"][()]
+            E = fp_in["E_ohm"][()]
+            J = fp_in["J"][()]
+
+            Je = J[..., 0:4]
+            Ji = J[..., 4:8]
 
             BB = np.linalg.norm(B, axis=-1)
             BB = np.where(BB > 0.0, BB, 1.0)
@@ -91,7 +93,7 @@ class WaveActivityAnalyzer(base.JobExecutor):
                 fp_out.create_dataset("Vi", data=Vi_hp)
 
 
-class WaveActivityPlotter(base.JobExecutor):
+class WaveFilterPlotter(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
         if "plot" in self.options:
@@ -105,8 +107,8 @@ class WaveActivityPlotter(base.JobExecutor):
 
     def main(self):
         rawfile = self.get_filename(self.options.get("rawfile", "wavetool"), ".h5")
-        wavefile = self.get_filename(self.options.get("wavefile", "waveactivity"), ".h5")
-        output = self.options.get("output", "waveactivity")
+        wavefile = self.get_filename(self.options.get("wavefile", "wavefilter"), ".h5")
+        output = self.options.get("output", "wavefilter")
 
         with h5py.File(rawfile, "r") as fp_raw:
             self.parameter = pickle.loads(fp_raw["config"][()])["parameter"]
@@ -161,7 +163,7 @@ class WaveActivityPlotter(base.JobExecutor):
             r"$\delta B_z / B_0$",
             r"$|B| / B_0$",
             r"$\delta B_{envelope} / B_0$",
-            r"$\delta S_{parallel} / c B_0^2/4\pi$",
+            r"$\delta S_{parallel} / c B_0^2$",
         ]
 
         return X, Y, Az, vars, labels
@@ -170,7 +172,7 @@ class WaveActivityPlotter(base.JobExecutor):
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Wave Activity Analysis Tool")
+    parser = argparse.ArgumentParser(description="Wave Filter Tool")
     parser.add_argument(
         "-j",
         "--job",
@@ -185,19 +187,19 @@ def main():
     jobs = args.job.split(",")
 
     if "analyze" in jobs:
-        obj = WaveActivityAnalyzer(config)
+        obj = WaveFilterAnalyzer(config)
         obj.main()
         jobs = [j for j in jobs if j != "analyze"]
 
     if len(jobs) > 0:
-        obj = WaveActivityAnalyzer(config)
-        wavefile = obj.get_filename(obj.options.get("wavefile", "waveactivity"), ".h5")
+        obj = WaveFilterAnalyzer(config)
+        wavefile = obj.get_filename(obj.options.get("wavefile", "wavefilter"), ".h5")
         if not os.path.exists(wavefile):
             sys.exit("Error: File '{}' not found. Please run 'analyze' job first.".format(wavefile))
 
     for job in jobs:
         if job == "plot":
-            obj = WaveActivityPlotter(config)
+            obj = WaveFilterPlotter(config)
             obj.main()
         else:
             raise ValueError("Unknown job: {:s}".format(job))

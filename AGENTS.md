@@ -71,7 +71,7 @@ Use the following practical commands for validation.
   - `python shock/reduce1d.py --help`
   - `python shock/wavetool.py --help`
   - `python shock/mra.py --help`
-  - `python shock/waveactivity.py --help`
+  - `python shock/wavefilter.py --help`
   - `python shock/vdist.py --help`
   - `python shock/make_tracer_hdf5.py --help`
   - `python shock/printparam.py --help`
@@ -108,7 +108,7 @@ Use the following practical commands for validation.
 - MRA plot:
   - `python shock/mra.py -j plot <config.toml>`
 - Wave activity analyze + plot:
-  - `python shock/waveactivity.py -j analyze,plot <config.toml>`
+  - `python shock/wavefilter.py -j analyze,plot <config.toml>`
 - Velocity distribution reduction (MPI-capable script):
   - `python shock/vdist.py -j reduce <config.toml>`
 

@@ -51,6 +51,51 @@ class DataAnalyzer(base.JobExecutor):
     def encode(self, data):
         return np.frombuffer(pickle.dumps(data), np.int8)
 
+    def diff_central_periodic(self, x, dx, axis):
+        return (np.roll(x, -1, axis=axis) - np.roll(x, 1, axis=axis)) / (2.0 * dx)
+
+    def diff_central_zero_boundary(self, x, dx, axis):
+        grad = np.zeros_like(x)
+        dst = [slice(None)] * x.ndim
+        src_m = [slice(None)] * x.ndim
+        src_p = [slice(None)] * x.ndim
+        dst[axis] = slice(1, -1)
+        src_m[axis] = slice(0, -2)
+        src_p[axis] = slice(2, None)
+        grad[tuple(dst)] = (x[tuple(src_p)] - x[tuple(src_m)]) / (2.0 * dx)
+        return grad
+
+    def calc_e_ohm(self, B, M, dx, dy):
+        Lambda = M[..., 0]
+        Gamma = M[..., 1:4]
+
+        Pxx = M[..., 4]
+        Pyy = M[..., 5]
+        Pxy = M[..., 7]
+        Pyz = M[..., 8]
+        Pzx = M[..., 9]
+
+        dPxx_dx = self.diff_central_zero_boundary(Pxx, dx, axis=1)
+        dPxy_dx = self.diff_central_zero_boundary(Pxy, dx, axis=1)
+        dPzx_dx = self.diff_central_zero_boundary(Pzx, dx, axis=1)
+        dPxy_dy = self.diff_central_periodic(Pxy, dy, axis=0)
+        dPyy_dy = self.diff_central_periodic(Pyy, dy, axis=0)
+        dPyz_dy = self.diff_central_periodic(Pyz, dy, axis=0)
+
+        divPi = np.stack(
+            [
+                dPxx_dx + dPxy_dy,
+                dPxy_dx + dPyy_dy,
+                dPzx_dx + dPyz_dy,
+            ],
+            axis=-1,
+        )
+
+        rhs = -np.cross(Gamma, B, axis=-1) + divPi
+        denom = Lambda
+        E_ohm = rhs / (denom[..., np.newaxis] + 1.0e-32)
+        return E_ohm
+
     def save(self, filename):
         profile = self.options.get("profile", None)
         config = self.options.get("config", None)
@@ -118,6 +163,7 @@ class DataAnalyzer(base.JobExecutor):
                 fp.create_dataset("x", (Nt, Mx), dtype=np.float64, chunks=(1, Mx))
                 fp.create_dataset("y", (Nt, My), dtype=np.float64, chunks=(1, My))
                 fp.create_dataset("E", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
+                fp.create_dataset("E_ohm", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
                 fp.create_dataset("B", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
                 fp.create_dataset("J", (Nt, My, Mx, 8), dtype=np.float64, chunks=(1, My, Mx, 8))
                 fp.create_dataset("M", (Nt, My, Mx, 10), dtype=np.float64, chunks=(1, My, Mx, 10))
@@ -130,6 +176,9 @@ class DataAnalyzer(base.JobExecutor):
                 rewrite_all = True
             if "M" not in fp:
                 fp.create_dataset("M", (Nt, My, Mx, 10), dtype=np.float64, chunks=(1, My, Mx, 10))
+                rewrite_all = True
+            if "E_ohm" not in fp:
+                fp.create_dataset("E_ohm", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
                 rewrite_all = True
 
         # read step
@@ -168,6 +217,7 @@ class DataAnalyzer(base.JobExecutor):
             uf = delta * uf[..., xind - 1, :] + (1 - delta) * uf[..., xind, :]
             j = delta * j[..., xind - 1, :] + (1 - delta) * j[..., xind, :]
             m = delta * m[..., xind - 1, :] + (1 - delta) * m[..., xind, :]
+            e_ohm = self.calc_e_ohm(uf[..., 3:6], m, num_average * dh, num_average * dh)
 
             # store data
             with h5py.File(filename, "a") as fp:
@@ -176,6 +226,7 @@ class DataAnalyzer(base.JobExecutor):
                 fp["x"][i, ...] = xnew
                 fp["y"][i, ...] = yc
                 fp["E"][i, ...] = uf[..., 0:3]
+                fp["E_ohm"][i, ...] = e_ohm
                 fp["B"][i, ...] = uf[..., 3:6]
                 fp["J"][i, ...] = j
                 fp["M"][i, ...] = m

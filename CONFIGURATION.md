@@ -89,23 +89,23 @@ rawfile = "wavetool"
 mrafile = "mra"
 ```
 
-## `waveactivity.py`
+## `wavefilter.py`
 
 ```toml
-dirname = "waveactivity"
+dirname = "wavetool"
 profile = "profile.msgpack"
 overwrite = true
 
 [analyze]
 rawfile = "wavetool"
-wavefile = "waveactivity"
+wavefile = "wavefilter"
 fs = 4.0
 fc = 0.5
 order = 4
 
 [plot]
-wavefile = "waveactivity"
-output = "waveactivity"
+wavefile = "wavefilter"
+output = "wavefilter"
 fps = 10
 B_wave_lim = [-0.25, 0.25]
 B_env_lim = [0.0, 0.5]
