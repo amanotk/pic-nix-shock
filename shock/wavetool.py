@@ -9,6 +9,7 @@ import h5py
 import matplotlib as mpl
 import numpy as np
 import scipy.ndimage as ndimage
+import toml
 import tqdm
 
 mpl.use("Agg") if __name__ == "__main__" else None
@@ -61,9 +62,17 @@ class DataAnalyzer(base.JobExecutor):
         step_max = self.options.get("step_max", sys.maxsize)
         x_offset = self.options.get("x_offset", -80)
 
-        if "shock_position" not in self.options:
-            sys.exit("Error: 'shock_position' is required in options.")
-        shock_position = self.options["shock_position"]
+        shock_position = self.options.get("shock_position", None)
+        if shock_position is None:
+            reduce1d_result = (
+                pathlib.Path(self.get_dirname()).parent / "reduce1d" / "reduce1d_result.toml"
+            )
+            if not reduce1d_result.exists():
+                sys.exit(
+                    "Error: 'shock_position' is not provided and default reduce1d result file "
+                    "'{}' was not found.".format(reduce1d_result)
+                )
+            shock_position = toml.load(str(reduce1d_result))["shock_position"]
 
         method = self.options.get("method", "thread")
         run = picnix.Run(profile, config=config, method=method)
@@ -110,8 +119,18 @@ class DataAnalyzer(base.JobExecutor):
                 fp.create_dataset("y", (Nt, My), dtype=np.float64, chunks=(1, My))
                 fp.create_dataset("E", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
                 fp.create_dataset("B", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
-                fp.create_dataset("Je", (Nt, My, Mx, 4), dtype=np.float64, chunks=(1, My, Mx, 4))
-                fp.create_dataset("Ji", (Nt, My, Mx, 4), dtype=np.float64, chunks=(1, My, Mx, 4))
+                fp.create_dataset("J", (Nt, My, Mx, 8), dtype=np.float64, chunks=(1, My, Mx, 8))
+                fp.create_dataset("M", (Nt, My, Mx, 10), dtype=np.float64, chunks=(1, My, Mx, 10))
+
+        # support old output files without transformed moments/current dataset
+        rewrite_all = False
+        with h5py.File(filename, "a") as fp:
+            if "J" not in fp:
+                fp.create_dataset("J", (Nt, My, Mx, 8), dtype=np.float64, chunks=(1, My, Mx, 8))
+                rewrite_all = True
+            if "M" not in fp:
+                fp.create_dataset("M", (Nt, My, Mx, 10), dtype=np.float64, chunks=(1, My, Mx, 10))
+                rewrite_all = True
 
         # read step
         with h5py.File(filename, "r") as fp:
@@ -120,20 +139,26 @@ class DataAnalyzer(base.JobExecutor):
         # read and process data for each step
         for i, index in enumerate(tqdm.tqdm(index_range)):
             # skip if the step is already stored
-            if step_in_file[i] == field_step[index]:
+            if not rewrite_all and step_in_file[i] == field_step[index]:
                 continue
 
             # read data
             time = run.get_time_at(prefix, field_step[index])
             data = run.read_at(prefix, field_step[index])
             uf = data["uf"].mean(axis=0)
-            je = data["um"].mean(axis=0)[..., 0, 0:4] * qme
-            ji = data["um"].mean(axis=0)[..., 1, 0:4] * qmi
+            um = data["um"].mean(axis=0)
+            je = um[..., 0, 0:4] * qme
+            ji = um[..., 1, 0:4] * qmi
+            m = np.empty(um.shape[:-2] + (10,), dtype=um.dtype)
+            m[..., 0:4] = um[..., 0, 0:4] * qme**2 + um[..., 1, 0:4] * qmi**2
+            m[..., 4:10] = um[..., 0, 8:14] * qme + um[..., 1, 8:14] * qmi
 
             # average
             uf = self.average2d(uf, num_average)
             je = self.average2d(je, num_average)
             ji = self.average2d(ji, num_average)
+            m = self.average2d(m, num_average)
+            j = np.concatenate([je, ji], axis=-1)
 
             # linear interpolation in x
             xmin = np.polyval(shock_position, time) + x_offset
@@ -141,8 +166,8 @@ class DataAnalyzer(base.JobExecutor):
             xind = xc.searchsorted(xnew)
             delta = ((xc[xind] - xnew) / (xc[xind] - xc[xind - 1]))[np.newaxis, :, np.newaxis]
             uf = delta * uf[..., xind - 1, :] + (1 - delta) * uf[..., xind, :]
-            je = delta * je[..., xind - 1, :] + (1 - delta) * je[..., xind, :]
-            ji = delta * ji[..., xind - 1, :] + (1 - delta) * ji[..., xind, :]
+            j = delta * j[..., xind - 1, :] + (1 - delta) * j[..., xind, :]
+            m = delta * m[..., xind - 1, :] + (1 - delta) * m[..., xind, :]
 
             # store data
             with h5py.File(filename, "a") as fp:
@@ -152,8 +177,8 @@ class DataAnalyzer(base.JobExecutor):
                 fp["y"][i, ...] = yc
                 fp["E"][i, ...] = uf[..., 0:3]
                 fp["B"][i, ...] = uf[..., 3:6]
-                fp["Je"][i, ...] = je
-                fp["Ji"][i, ...] = ji
+                fp["J"][i, ...] = j
+                fp["M"][i, ...] = m
 
 
 class SummaryPlotter(base.JobExecutor):
@@ -247,8 +272,13 @@ class SummaryPlotter(base.JobExecutor):
                 r"$B_z / B_0$",
             ]
         elif quantity == "current":
-            Je = fileobj["Je"][index, ...]
-            Ji = fileobj["Ji"][index, ...]
+            if "J" in fileobj:
+                J = fileobj["J"][index, ...]
+                Je = J[..., 0:4]
+                Ji = J[..., 4:8]
+            else:
+                Je = fileobj["Je"][index, ...]
+                Ji = fileobj["Ji"][index, ...]
 
             vars = [
                 Je[..., 1] / J0,
