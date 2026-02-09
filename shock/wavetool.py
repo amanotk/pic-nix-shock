@@ -130,6 +130,7 @@ class DataAnalyzer(base.JobExecutor):
                 rewrite_all = True
             if "M" not in fp:
                 fp.create_dataset("M", (Nt, My, Mx, 10), dtype=np.float64, chunks=(1, My, Mx, 10))
+                rewrite_all = True
 
         # read step
         with h5py.File(filename, "r") as fp:
