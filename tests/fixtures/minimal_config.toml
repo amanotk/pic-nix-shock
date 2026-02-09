@@ -1,4 +1,5 @@
 # Minimal configuration for testing
+run = "run1"
 dirname = "test_output"
 profile = "test_profile.msgpack"
 overwrite = true

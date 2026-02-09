@@ -32,11 +32,20 @@ This document is based only on files currently tracked by git.
   - Domain dependency: `picnix` (imported as a Python module, and sometimes via `PICNIX_DIR/script` on `sys.path`).
 - Some scripts use MPI (`shock/vdist.py`) and may need `mpiexec`.
 
+### Repository setup
+
+- After cloning, run `bash scripts/setup.sh` once to:
+  - Create the `work/` directory
+  - Set up `.shock.env` from example
+  - Sync the Python environment with `uv` (or pip fallback if `uv` is unavailable)
+- Run this again if you accidentally delete the `work/` directory or need to reinstall the environment.
+- The setup script is local and not pushed to remote.
+
 ### Local env file and path behavior
 
 - The runtime may auto-load a repo-root `.shock.env` (or file pointed by `SHOCK_ENV_FILE`).
-- `SHOCK_WORK_ROOT` defaults to `work` and is used as base for relative `dirname` values in configs.
-- `SHOCK_DATA_ROOT` is optional metadata/convention only; profile paths are still specified explicitly per run.
+- `SHOCK_WORK_ROOT` defaults to `./work`; outputs are written under `SHOCK_WORK_ROOT/run/dirname`.
+- `SHOCK_DATA_ROOT` defaults to `./data`; profile is resolved as `SHOCK_DATA_ROOT/run/profile` (default profile is `data/profile.msgpack`).
 
 ## Build / Lint / Test Commands
 
@@ -45,6 +54,8 @@ Use the following practical commands for validation.
 
 ### Environment smoke checks
 
+- Repository setup:
+  - `bash scripts/setup.sh` (creates `.shock.env`, `work/`, and syncs env)
 - Sync environment (preferred):
   - `uv sync`
 - Check Python version:

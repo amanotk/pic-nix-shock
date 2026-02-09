@@ -54,13 +54,33 @@ class JobExecutor:
         else:
             raise ValueError("Unsupported configuration file format")
 
-        # Resolve profile path relative to config file
-        if "profile" in config:
-            config_dir = os.path.dirname(os.path.abspath(filename))
-            profile_path = os.path.join(config_dir, config["profile"])
-            config["profile"] = os.path.normpath(profile_path)
+        run_path = self._normalize_relative_subpath(config.get("run", None), "run")
+        profile_path = self._normalize_relative_subpath(
+            config.get("profile", "data/profile.msgpack"),
+            "profile",
+        )
+        data_root = pathlib.Path(os.environ.get("SHOCK_DATA_ROOT", "./data")).expanduser()
+
+        config["run"] = run_path.as_posix()
+        config["profile"] = str(data_root / run_path / profile_path)
 
         return config
+
+    def _normalize_relative_subpath(self, value, key):
+        if not isinstance(value, str) or len(value.strip()) == 0:
+            raise ValueError(f"{key} must be a non-empty string")
+
+        value_path = pathlib.PurePath(value)
+        if value_path.is_absolute():
+            raise ValueError(f"{key} must be a relative path")
+
+        parts = [part for part in value_path.parts if part not in ("", ".")]
+        if len(parts) == 0:
+            raise ValueError(f"{key} must be a non-empty relative path")
+        if any(part == ".." for part in parts):
+            raise ValueError(f"{key} must not contain '..'")
+
+        return pathlib.Path(*parts)
 
     def read_parameter(self):
         # read parameter from profile
@@ -75,10 +95,11 @@ class JobExecutor:
         dirname = self.options.get("dirname", None)
         if dirname is None:
             raise ValueError("dirname is not specified")
-        dirname_path = pathlib.Path(dirname)
-        if not dirname_path.is_absolute():
-            work_root = os.environ.get("SHOCK_WORK_ROOT", "work")
-            dirname_path = pathlib.Path(work_root) / dirname_path
+        run = self.options.get("run", None)
+        run_path = self._normalize_relative_subpath(run, "run")
+        dirname_path = self._normalize_relative_subpath(dirname, "dirname")
+        work_root = pathlib.Path(os.environ.get("SHOCK_WORK_ROOT", "./work")).expanduser()
+        dirname_path = work_root / run_path / dirname_path
         dirname_path.mkdir(parents=True, exist_ok=True)
         return str(dirname_path)
 
