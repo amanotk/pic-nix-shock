@@ -39,11 +39,11 @@ where $\theta = \tan^{-1} (k_y / k_x)$ is the angle between the wave vector and 
 ### Circularly Polarized Electromagnetic Wave Model
 The model may be further constrained by the following physical conditions:
 
-1. Solenoidal Condition
+1. Solenoidal Condition  
   The solenoidal condition for the magnetic field $\nabla \cdot \boldsymbol{B} = 0$ gives $B_3 = 0$.
-1. Electromagnetic Fluctuations
+1. Electromagnetic Fluctuations  
   If the fluctuation is electromagnetic, $\nabla \cdot \boldsymbol{E} = 0$, meaning that $E_3 = 0$.
-1. Circular Polarization
+1. Circular Polarization  
   For circularly polarized electromagnetic waves, in addition to the above two conditions, we have further constraints on the amplitudes and phases:
   ```math
     f_1 = f_2, \quad \phi_2 = \phi_1 - \pi/2
