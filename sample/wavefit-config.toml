@@ -3,19 +3,30 @@ dirname = "wavetool-field"
 profile = "data/profile.msgpack"
 overwrite = true
 
+# Wavefit runtime mode is controlled by CLI flags, not TOML:
+# - normal run: analyzes all snapshots in wavefile
+# - --debug: analyzes only a subset (via --debug-count/--debug-mode/--debug-index)
+#
+# Example:
+#   python -m shock.wavefit -j analyze sample/wavefit-config.toml
+#   python -m shock.wavefit -j analyze --debug --debug-count 4 sample/wavefit-config.toml
+#   python -m shock.wavefit -j analyze --debug --debug-index 0 --debug-index 8 sample/wavefit-config.toml
+
 [analyze]
 wavefile = "wavefilter"
 fitfile = "wavefit"
-snapshot_index = 0
 
 # Gaussian window in physical units
 sigma = 4.0
 
 # Candidate selection from |B| envelope
-max_candidates = 24
+# envelope_threshold_fraction is relative to max(|B| envelope)
+# candidate_min_distance_sigma is a factor times sigma
+# max_candidates is used only when running with --debug
+max_candidates = 32
 envelope_smooth_sigma = 0.5
 envelope_threshold_fraction = 0.50
-candidate_min_distance_sigma = 3.0
+candidate_min_distance_sigma = 1.0
 
 # Fit region around each candidate
 patch_radius_sigma = 3.0
@@ -24,16 +35,22 @@ fit_min_points = 64
 # Circular-wave fit bounds/initial values
 kx_init = 0.30
 kx_min = 0.10
-kx_max = 1.00
+kx_max = 2.00
 ky_init = 0.00
 ky_abs_max = 1.00
 
-# Quality flags (fits are stored even if low_quality)
-min_support_fraction = 0.50
-good_nrmse_max = 0.80
-good_r2_min = 0.00
+# Optional multi-start seeds (multi-start is always enabled)
+# If omitted, internal defaults are used.
+kx_init_scan = [0.1, 0.3, 0.6]
+ky_init_scan = [-0.8, -0.4, 0.0, 0.4, 0.8]
 
-# Diagnostic plots for visual inspection
+# Quality gates (fits are still stored even if low_quality)
+# good_nrmse_bal_max: lower is stricter
+# good_lambda_factor_max: requires wavelength <= factor * sigma
+good_nrmse_bal_max = 0.40
+good_lambda_factor_max = 4.0
+
+# Diagnostic plots (generated only in --debug mode)
 debug_plot = true
 debug_plot_count = 8
 debug_plot_prefix = "wavefit-debug"

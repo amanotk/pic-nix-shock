@@ -8,21 +8,22 @@ from .model import periodic_delta
 
 def pick_candidate_points(xx, yy, envelope, sigma, options):
     smooth_sigma = float(options.get("envelope_smooth_sigma", 0.5))
-    max_candidates = int(options.get("max_candidates", 32))
+    max_candidates_opt = options.get("max_candidates", None)
+    if max_candidates_opt is None:
+        max_candidates = None
+    else:
+        max_candidates = int(max_candidates_opt)
+        if max_candidates <= 0:
+            max_candidates = None
     threshold_fraction = float(options.get("envelope_threshold_fraction", 0.5))
-    threshold_quantile = options.get("envelope_threshold_quantile", None)
-    min_distance_sigma = float(options.get("candidate_min_distance_sigma", 3.0))
+    min_distance_sigma = float(options.get("candidate_min_distance_sigma", 1.0))
 
     env = np.array(envelope, copy=True)
     if smooth_sigma > 0.0:
         env = ndimage.gaussian_filter1d(env, sigma=smooth_sigma, axis=0, mode="wrap")
         env = ndimage.gaussian_filter1d(env, sigma=smooth_sigma, axis=1, mode="nearest")
 
-    if threshold_quantile is None:
-        threshold = threshold_fraction * float(env.max())
-    else:
-        qvalue = float(np.quantile(env, float(threshold_quantile)))
-        threshold = max(threshold_fraction * float(env.max()), qvalue)
+    threshold = threshold_fraction * float(env.max())
 
     xdx = np.median(np.diff(xx))
     ydy = np.median(np.diff(yy))
@@ -61,7 +62,7 @@ def pick_candidate_points(xx, yy, envelope, sigma, options):
         if keep:
             selected_ix.append(ix)
             selected_iy.append(iy)
-        if len(selected_ix) >= max_candidates:
+        if max_candidates is not None and len(selected_ix) >= max_candidates:
             break
 
     return np.array(selected_ix, dtype=np.int64), np.array(selected_iy, dtype=np.int64), env

@@ -9,6 +9,8 @@ This document is based only on files currently tracked by git.
 - Primary docs live in `README.md`.
 - Example runtime configs live in `sample/*.toml`.
 - Packaging metadata is tracked in `pyproject.toml`.
+- For wavefit CLI/runtime semantics, prefer `CONFIGURATION.md` and
+  `sample/wavefit-config.toml` as the source of truth for current options.
 
 ## Agent Scope
 

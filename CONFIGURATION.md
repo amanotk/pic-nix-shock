@@ -180,7 +180,7 @@ Example: `sample/wavefit-config.toml`
 
 `wavefit.py` reads filtered fields from `wavefilter` output and fits a
 localized circularly polarized plane-wave model to selected candidate points
-on one snapshot.
+across selected snapshots.
 
 ```toml
 run = "run1"
@@ -191,18 +191,21 @@ overwrite = true
 [analyze]
 wavefile = "wavefilter"
 fitfile = "wavefit"
-snapshot_index = 0
 sigma = 4.0
-max_candidates = 24
+max_candidates = 32
 envelope_smooth_sigma = 0.5
 envelope_threshold_fraction = 0.50
-candidate_min_distance_sigma = 3.0
+candidate_min_distance_sigma = 1.0
 patch_radius_sigma = 3.0
 kx_init = 0.30
 kx_min = 0.10
-kx_max = 1.00
+kx_max = 2.00
 ky_init = 0.00
 ky_abs_max = 1.00
+kx_init_scan = [0.1, 0.3, 0.6]
+ky_init_scan = [-0.8, -0.4, 0.0, 0.4, 0.8]
+good_nrmse_bal_max = 0.40
+good_lambda_factor_max = 4.0
 debug_plot = true
 debug_plot_count = 8
 debug_plot_prefix = "wavefit-debug"
@@ -210,13 +213,32 @@ debug_plot_prefix = "wavefit-debug"
 
 Notes:
 
+- AI quick reference (operational semantics):
+  - Non-debug run analyzes all snapshots in the input `wavefile`.
+  - `--debug` enables subset mode (`--debug-count`, `--debug-mode`, `--debug-index`).
+  - `max_candidates` applies only in debug mode; non-debug candidate count is unbounded.
+  - `helicity` scan and multi-start are always enabled in current implementation.
+  - Use `good_nrmse_bal_max` and `good_lambda_factor_max` for quality gates.
+
 - `sigma` is the Gaussian-window width in physical `x`/`y` units.
 - `y` is treated as periodic in both candidate spacing and fitting window.
 - Data and model are both multiplied by the same Gaussian window before
   residual evaluation.
+- `max_candidates` is applied only in `--debug` mode; non-debug runs process
+  all detected candidates.
+- Non-debug runs process all snapshots; debug subset selection is controlled by
+  CLI options.
 - Output is stored in `fitfile.h5` under `snapshots/<step>/...` with one row
   per candidate fit and quality metrics (`nrmse`, `r2E`, `r2B`, `redchi`, etc.).
 - Optional diagnostic plots are saved with prefix `debug_plot_prefix`.
+
+Example debug commands:
+
+```bash
+python -m shock.wavefit -j analyze --debug sample/wavefit-config.toml
+python -m shock.wavefit -j analyze --debug --debug-count 4 sample/wavefit-config.toml
+python -m shock.wavefit -j analyze --debug --debug-index 0 --debug-index 16 sample/wavefit-config.toml
+```
 
 ## Environment Variables
 

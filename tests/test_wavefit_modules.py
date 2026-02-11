@@ -54,6 +54,26 @@ def test_wavefit_candidates_pick_points_respects_spacing():
     assert int(cand_iy[0]) == 10
 
 
+def test_wavefit_candidates_no_limit_when_max_candidates_not_set():
+    from shock.wavefit.candidates import pick_candidate_points
+
+    xx = np.linspace(0.0, 30.0, 61)
+    yy = np.linspace(0.0, 15.0, 31)
+    env = np.zeros((yy.size, xx.size), dtype=np.float64)
+    env[5, 10] = 9.0
+    env[10, 20] = 8.0
+    env[15, 30] = 7.0
+
+    options = {
+        "envelope_threshold_fraction": 0.1,
+        "candidate_min_distance_sigma": 1.0,
+        "envelope_smooth_sigma": 0.0,
+    }
+    cand_ix, cand_iy, _ = pick_candidate_points(xx, yy, env, sigma=1.0, options=options)
+    assert cand_ix.size == 3
+    assert cand_iy.size == 3
+
+
 def test_wavefit_plot_quickcheck_smoke_writes_png(temp_dir):
     from shock.wavefit.plot import save_quickcheck_plot_12panel
 
@@ -82,6 +102,43 @@ def test_wavefit_plot_quickcheck_smoke_writes_png(temp_dir):
 
     png_path = Path(temp_dir) / "wavefit-quickcheck-smoke.png"
     save_quickcheck_plot_12panel(str(png_path), fit_result, title="smoke", rms_normalize=True)
+    assert png_path.exists()
+    assert png_path.stat().st_size > 0
+
+
+def test_wavefit_plot_diagnostic_tolerates_missing_support_fraction(temp_dir):
+    from shock.wavefit.plot import save_diagnostic_plot
+
+    ny, nx = 16, 18
+    xx = np.linspace(0.0, 1.0, nx)
+    yy = np.linspace(0.0, 1.0, ny)
+    envelope = np.zeros((ny, nx), dtype=np.float64)
+    rng = np.random.default_rng(42)
+    fit_result = {
+        "windowed_data_E": rng.normal(size=(ny, nx, 3)),
+        "windowed_data_B": rng.normal(size=(ny, nx, 3)),
+        "windowed_model_E": rng.normal(size=(ny, nx, 3)),
+        "windowed_model_B": rng.normal(size=(ny, nx, 3)),
+        "patch_x": xx,
+        "patch_y": yy,
+        "success": True,
+        "reason": "ok",
+        "kx": 0.1,
+        "ky": 0.8,
+        "Ew": 0.2,
+        "Bw": 0.3,
+        "phiE": 0.2,
+        "phiB": -0.1,
+        "nrmse": 0.3,
+        "nrmseE": 0.31,
+        "nrmseB": 0.29,
+        "k": 0.81,
+        "wavelength_over_sigma": 2.0,
+        "redchi": 1.2,
+    }
+
+    png_path = Path(temp_dir) / "wavefit-diagnostic-smoke.png"
+    save_diagnostic_plot(str(png_path), envelope, xx, yy, 0, 0, fit_result)
     assert png_path.exists()
     assert png_path.stat().st_size > 0
 
@@ -136,13 +193,10 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
         "kx_max": 1.5,
         "ky_init": 0.5,
         "ky_abs_max": 1.5,
-        "fit_multi_start": True,
         "kx_init_scan": [0.0, 0.15, 0.5],
         "ky_init_scan": [0.5, 0.8, -0.5],
-        "helicity_scan": [1.0, -1.0],
         "good_nrmse_bal_max": 0.4,
         "good_lambda_factor_max": 4.0,
-        "min_support_fraction": 0.2,
     }
 
     result = fit_one_candidate(E, B, xx, yy, true["x0"], true["y0"], true["sigma"], options)
@@ -150,3 +204,17 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
     assert result["nrmse_balanced"] < 0.4
     assert result["is_good_nrmse"]
     assert result["is_good_scale"]
+
+
+def test_wavefit_cli_select_debug_indices_modes():
+    from shock.wavefit.cli import select_debug_indices
+
+    assert np.array_equal(select_debug_indices(5, debug=False), np.array([0, 1, 2, 3, 4]))
+    assert np.array_equal(
+        select_debug_indices(5, debug=True, debug_count=2, debug_mode="head"), np.array([0, 1])
+    )
+
+    uniform = select_debug_indices(10, debug=True, debug_count=4, debug_mode="uniform")
+    assert uniform.size == 4
+    assert int(uniform[0]) == 0
+    assert int(uniform[-1]) == 9

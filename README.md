@@ -147,15 +147,28 @@ between different prefix runs.
 python shock/wavefilter.py -j analyze,plot sample/wavefilter-config.toml
 ```
 
-### Fit localized wave model on one snapshot
+### Fit localized wave model
 
 ```bash
 python -m shock.wavefit -j analyze sample/wavefit-config.toml
+# debug subset examples
+python -m shock.wavefit -j analyze --debug --debug-count 4 sample/wavefit-config.toml
+python -m shock.wavefit -j analyze --debug --debug-index 0 --debug-index 8 sample/wavefit-config.toml
 ```
 
 `wavefit.py` reads filtered `E` and `B` fields from `wavefilter` output,
 detects strong wave-envelope candidates, and performs local circularly
-polarized wave fitting with Gaussian windows.
+polarized wave fitting with Gaussian windows. Non-debug runs analyze all
+snapshots in the input file; debug mode analyzes a subset.
+
+Quick behavior guide:
+
+- Normal run (`python -m shock.wavefit -j analyze ...`) processes all snapshots.
+- Debug run (`--debug`) processes a subset for fast iteration.
+- `--debug-count` and `--debug-mode` control subset sampling.
+- Repeat `--debug-index` to process exact snapshot indices in debug mode.
+- `max_candidates` in TOML applies only in debug mode (normal run is unbounded).
+- `sample/wavefit-config.toml` includes comments for the recommended defaults.
 
 ### Compute velocity distributions
 

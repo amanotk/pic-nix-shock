@@ -81,7 +81,7 @@ def save_diagnostic_plot(filename, envelope, xx, yy, ix, iy, fit_result):
         fit_result.get("k", np.nan),
         fit_result.get("wavelength_over_sigma", np.nan),
         fit_result["redchi"],
-        fit_result["support_fraction"],
+        fit_result.get("support_fraction", np.nan),
     )
     fig.text(0.015, 0.01, txt, fontsize=9, family="monospace")
     fig.savefig(filename)

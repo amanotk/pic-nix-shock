@@ -61,7 +61,7 @@ def calc_r2(y, yhat):
 
 
 def evaluate_fit_quality(nrmse_balanced, kx, ky, sigma, options):
-    nrmse_limit = float(options.get("good_nrmse_bal_max", options.get("good_nrmse_max", 0.4)))
+    nrmse_limit = float(options.get("good_nrmse_bal_max", 0.4))
     lambda_factor = float(options.get("good_lambda_factor_max", 4.0))
 
     k_mag = float(np.sqrt(kx**2 + ky**2))

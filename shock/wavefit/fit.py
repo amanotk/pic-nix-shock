@@ -51,7 +51,7 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
     rms_b = rms_floor(Bw_data)
 
     kx_min = float(options.get("kx_min", 0.1))
-    kx_max = float(options.get("kx_max", 1.0))
+    kx_max = float(options.get("kx_max", 2.0))
     ky_abs_max = float(options.get("ky_abs_max", 1.0))
     kx_init = float(options.get("kx_init", 0.3))
     ky_init = float(options.get("ky_init", 0.0))
@@ -80,18 +80,7 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
         kx_scan = [float(v) for v in kx_scan_user]
     kx_scan = unique_values([clip_value(v, kx_min, kx_max) for v in kx_scan])
 
-    helicity_scan_user = options.get("helicity_scan", None)
-    if helicity_scan_user is None:
-        helicity_scan = [1.0, -1.0]
-    else:
-        helicity_scan = [1.0 if float(v) >= 0.0 else -1.0 for v in helicity_scan_user]
-    helicity_scan = unique_values(helicity_scan)
-
-    fit_multi_start = bool(options.get("fit_multi_start", True))
-    if not fit_multi_start:
-        ky_scan = [clip_value(ky_init, -ky_abs_max, ky_abs_max)]
-        kx_scan = [clip_value(kx_init, kx_min, kx_max)]
-        helicity_scan = [helicity_scan[0]]
+    helicity_scan = [1.0, -1.0]
 
     best = None
     best_helicity = 1.0
@@ -179,8 +168,6 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
     r2e = calc_r2(Ew_data, Em)
     r2b = calc_r2(Bw_data, Bm)
 
-    support_fraction = float(np.sum(Wpatch) / max(np.sum(Wfull), 1.0e-30))
-    min_support = float(options.get("min_support_fraction", 0.5))
     quality = evaluate_fit_quality(
         nrmse_balanced, float(p["kx"].value), float(p["ky"].value), sigma, options
     )
@@ -188,8 +175,6 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
     reason = "ok"
     if not result.success:
         reason = "no_converge"
-    elif support_fraction < min_support:
-        reason = "low_support"
     elif not quality["is_good_nrmse"]:
         reason = "low_quality_nrmse"
     elif not quality["is_good_scale"]:
@@ -222,7 +207,6 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
         "is_good_scale": bool(quality["is_good_scale"]),
         "r2E": float(r2e),
         "r2B": float(r2b),
-        "support_fraction": float(support_fraction),
         "is_good": bool(reason == "ok" and quality["is_good_overall"]),
         "patch_xmin": float(xxp.min()),
         "patch_xmax": float(xxp.max()),
