@@ -5,6 +5,7 @@ import types
 
 import h5py
 import numpy as np
+import pytest
 
 
 def test_wavefilter_analyze_writes_filtered_fields(temp_dir, monkeypatch):
@@ -84,3 +85,11 @@ def test_wavefilter_analyze_writes_filtered_fields(temp_dir, monkeypatch):
         assert fp["E"].shape == (nt, ny, nx, 3)
         assert np.all(np.isfinite(fp["B"][...]))
         assert np.all(np.isfinite(fp["E"][...]))
+
+
+def test_wavefilter_spatial_smooth_rejects_negative_sigma():
+    from shock import wavefilter
+
+    arr = np.zeros((4, 5, 3), dtype=np.float64)
+    with pytest.raises(ValueError, match="smooth_sigma"):
+        wavefilter.spatial_smooth(arr, -1.0)

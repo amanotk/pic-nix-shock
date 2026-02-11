@@ -66,7 +66,13 @@ shock_position = [0.01, -75.0]
 [plot]
 fps = 10
 quantity = "field"
+aspect_ratio = 2.0
+x_center_offset = 0.0
 ```
+
+`aspect_ratio` controls the x-window length as `x_length / y_length` while keeping
+equal axis scaling. The full y-range is always shown, and x-window center is
+`shock_position(t) + x_center_offset` (fallback: x-domain center if shock position is unavailable).
 
 Example commands:
 
@@ -119,6 +125,13 @@ order = 4
 wavefile = "wavefilter"
 output = "wavefilter"
 fps = 10
+quantity = "wave"
+aspect_ratio = 2.0
+x_center_offset = 0.0
+# quantity = "field"
+# E_lim = [-0.2, 0.2]
+# B_lim = [-0.2, 0.2]
+smooth_sigma = 0.5
 B_wave_lim = [-0.25, 0.25]
 B_env_lim = [0.0, 0.5]
 B_abs_lim = [0.5, 5.0]
@@ -134,11 +147,31 @@ S_para_lim = [-0.5, 0.5]
 Cutoff frequencies are in inverse time units of the input HDF5 `t` array.
 Sampling frequency is inferred from `t` and requires equally sampled time points.
 
+`smooth_sigma` applies optional Gaussian smoothing (in cell units) during plotting.
+Smoothing uses periodic boundary in `y` (`wrap`) and non-periodic boundary in `x` (`nearest`).
+Set `smooth_sigma = 0` to disable smoothing.
+
+`aspect_ratio` controls the x-window length as `x_length / y_length` while keeping
+equal axis scaling. The full y-range is always shown, and x-window center is
+`shock_position(t) + x_center_offset` (fallback: x-domain center if shock position is unavailable).
+
 `analyze` stores filtered `E` (from `E_ohm`) and filtered `B`.
 `plot` computes Poynting flux from these filtered fields as
 `S = E x B` (in the project normalization; no explicit `4\pi` factor).
 `S_parallel` is the projection of `S` onto the local, instantaneous
 ambient magnetic-field direction `B_raw / |B_raw|`.
+
+`plot.quantity` selects panel content:
+
+- `wave` (default): `\delta Bx, \delta By, \delta Bz, |B|, B_envelope, S_parallel`
+- `field`: `Ex/E0, Ey/E0, Ez/E0, Bx/B0, By/B0, Bz/B0`
+
+For `field`, normalization follows `wavetool.py`:
+
+- `B0 = sqrt(sigma) / sqrt(1 + u0^2)`
+- `E0 = B0 * u0 / sqrt(1 + u0^2)`
+
+Optional `field` color limits are `E_lim` and `B_lim`.
 
 ## Environment Variables
 

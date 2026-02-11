@@ -18,19 +18,42 @@ class SixPanelWavePlot:
         else:
             print("No plot to save")
 
-    def plot(self, X, Y, time, Az, vars, labels):
+    def plot(self, X, Y, time, Az, vars, labels, xlim=None):
         if self.plot_dict is None:
-            self.plot_dict = self.plot_new(X, Y, Az, vars, labels)
+            self.plot_dict = self.plot_new(X, Y, Az, vars, labels, xlim=xlim)
         else:
-            self.plot_dict = self.plot_update(X, Y, Az, vars, labels)
+            self.plot_dict = self.plot_update(X, Y, Az, vars, labels, xlim=xlim)
 
         plt.suptitle(r"$\Omega_{{ci}} t$ = {:5.2f}".format(time))
 
     def _get_vlim(self):
+        quantity = self.options.get("quantity", "wave")
+        if quantity == "field":
+            E_lim = self.options.get("E_lim", [-0.2, 0.2])
+            B_lim = self.options.get("B_lim", [-0.2, 0.2])
+            return [
+                E_lim,
+                E_lim,
+                E_lim,
+                B_lim,
+                B_lim,
+                B_lim,
+            ]
+
         B_wave_lim = self.options.get("B_wave_lim", [-0.25, 0.25])
         B_env_lim = self.options.get("B_env_lim", [0.0, 0.5])
         B_abs_lim = self.options.get("B_abs_lim", [0.5, 5.0])
         S_para_lim = self.options.get("S_para_lim", [-0.5, 0.5])
+        wave_layout = self.options.get("wave_layout", "standard")
+        if wave_layout == "diagnostics_left":
+            return [
+                B_abs_lim,
+                B_env_lim,
+                S_para_lim,
+                B_wave_lim,
+                B_wave_lim,
+                B_wave_lim,
+            ]
         return [
             B_wave_lim,
             B_wave_lim,
@@ -40,11 +63,13 @@ class SixPanelWavePlot:
             S_para_lim,
         ]
 
-    def plot_new(self, X, Y, Az, vars, labels):
+    def plot_new(self, X, Y, Az, vars, labels, xlim=None):
         xmin = X.min()
         xmax = X.max()
         ymin = Y.min()
         ymax = Y.max()
+        if xlim is not None:
+            xmin, xmax = xlim
 
         fig = plt.figure(figsize=(10, 8), dpi=120)
         fig.subplots_adjust(
@@ -67,6 +92,7 @@ class SixPanelWavePlot:
         cxs = [0] * 6
         img = [0] * 6
         cnt = [0] * 6
+        clb = [0] * 6
 
         vlim = self._get_vlim()
         common_args = {
@@ -81,6 +107,19 @@ class SixPanelWavePlot:
             {**common_args, "vmin": vlim[4][0], "vmax": vlim[4][1], "cmap": "viridis"},
             {**common_args, "vmin": vlim[5][0], "vmax": vlim[5][1], "cmap": "bwr"},
         ]
+        quantity = self.options.get("quantity", "wave")
+        if quantity == "field":
+            for a in args:
+                a["cmap"] = "bwr"
+        elif quantity == "wave":
+            wave_layout = self.options.get("wave_layout", "standard")
+            if wave_layout == "diagnostics_left":
+                args[0]["cmap"] = "viridis"
+                args[1]["cmap"] = "viridis"
+                args[2]["cmap"] = "bwr"
+                args[3]["cmap"] = "bwr"
+                args[4]["cmap"] = "bwr"
+                args[5]["cmap"] = "bwr"
 
         for i in range(6):
             plt.sca(axs[i])
@@ -92,19 +131,21 @@ class SixPanelWavePlot:
             axs[i].yaxis.set_minor_locator(mpl.ticker.MultipleLocator(5))
             axs[i].set_aspect("equal")
             cxs[i] = plt.axes(base.get_colorbar_position_next(axs[i], 0.025))
-            plt.colorbar(cax=cxs[i])
+            clb[i] = plt.colorbar(img[i], cax=cxs[i])
             axs[i].set_title(labels[i])
 
         [axs[i].set_ylabel(r"$y / c/\omega_{pe}$") for i in (0, 1, 2)]
         [axs[i].set_xlabel(r"$x / c/\omega_{pe}$") for i in (2, 5)]
 
-        return {"fig": fig, "axs": axs, "img": img, "cnt": cnt, "cxs": cxs}
+        return {"fig": fig, "axs": axs, "img": img, "cnt": cnt, "cxs": cxs, "clb": clb}
 
-    def plot_update(self, X, Y, Az, vars, labels):
+    def plot_update(self, X, Y, Az, vars, labels, xlim=None):
         xmin = X.min()
         xmax = X.max()
         ymin = Y.min()
         ymax = Y.max()
+        if xlim is not None:
+            xmin, xmax = xlim
         vlim = self._get_vlim()
 
         fig = self.plot_dict["fig"]
@@ -112,6 +153,7 @@ class SixPanelWavePlot:
         img = self.plot_dict["img"]
         cnt = self.plot_dict["cnt"]
         cxs = self.plot_dict["cxs"]
+        clb = self.plot_dict["clb"]
 
         for i in range(6):
             cnt[i].remove()
@@ -124,7 +166,6 @@ class SixPanelWavePlot:
             axs[i].set_ylim(ymin, ymax)
             axs[i].set_title(labels[i])
             img[i].set_clim(vlim[i])
-            cxs[i].cla()
-            plt.colorbar(img[i], cax=cxs[i])
+            clb[i].update_normal(img[i])
 
-        return {"fig": fig, "axs": axs, "img": img, "cnt": cnt, "cxs": cxs}
+        return {"fig": fig, "axs": axs, "img": img, "cnt": cnt, "cxs": cxs, "clb": clb}
