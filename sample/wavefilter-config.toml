@@ -1,0 +1,26 @@
+run = "run1"
+dirname = "wavetool-field"
+profile = "data/profile.msgpack"
+overwrite = true
+
+[analyze]
+rawfile = "wavetool"
+wavefile = "wavefilter"
+fc_low = 0.5
+order = 4
+
+[plot]
+wavefile = "wavefilter"
+output = "wavefilter"
+fps = 10
+quantity = "wave"
+aspect_ratio = 2.0
+x_center_offset = 0.0
+# quantity = "field"
+# E_lim = [-0.2, 0.2]
+# B_lim = [-0.2, 0.2]
+smooth_sigma = 0.5
+B_wave_lim = [-0.25, 0.25]
+B_env_lim = [0.0, 0.5]
+B_abs_lim = [0.5, 5.0]
+S_para_lim = [-0.5, 0.5]

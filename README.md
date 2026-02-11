@@ -132,8 +132,19 @@ python shock/reduce1d.py -j plot sample/reduce1d-config.toml
 
 ```bash
 # sample config expects SHOCK_DATA_ROOT/run1/data/profile.msgpack
-python shock/wavetool.py -j analyze sample/wavetool-config.toml
-python shock/wavetool.py -j plot sample/wavetool-config.toml
+python shock/wavetool.py -j analyze --prefix field sample/wavetool-config.toml
+python shock/wavetool.py -j plot --prefix field sample/wavetool-config.toml
+```
+
+`wavetool.py` reads diagnostic prefix from `--prefix` (default: `field`) and writes
+outputs under `SHOCK_WORK_ROOT/run/<dirname>-<prefix>/...` to avoid collisions
+between different prefix runs.
+
+### Analyze wave activity (low/high/band-pass filter)
+
+```bash
+# sample config expects SHOCK_DATA_ROOT/run1/data/profile.msgpack
+python shock/wavefilter.py -j analyze,plot sample/wavefilter-config.toml
 ```
 
 ### Compute velocity distributions

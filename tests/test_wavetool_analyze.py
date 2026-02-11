@@ -121,11 +121,31 @@ def test_wavetool_analyze_writes_hdf5_and_transformed_moments(temp_dir, monkeypa
 
     with h5py.File(output_path, "r") as fp:
         assert "E" in fp
+        assert "E_ohm" in fp
         assert "B" in fp
         assert "J" in fp
         assert "M" in fp
         assert fp["E"].shape == (2, 4, 4, 3)
+        assert fp["E_ohm"].shape == (2, 4, 4, 3)
         assert fp["B"].shape == (2, 4, 4, 3)
         assert fp["J"].shape == (2, 4, 4, 8)
         assert fp["M"].shape == (2, 4, 4, 10)
         assert np.all(np.isfinite(fp["M"][...]))
+
+
+def test_calc_e_ohm_uses_small_epsilon_divisor(monkeypatch):
+    sys.modules.setdefault("picnix", types.ModuleType("picnix"))
+    from shock import wavetool
+
+    analyzer = object.__new__(wavetool.DataAnalyzer)
+
+    B = np.array([[[[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]]]], dtype=np.float64)
+    M = np.zeros((1, 1, 2, 10), dtype=np.float64)
+    M[..., 1] = 1.0
+    M[..., 0] = np.array([[[0.0, 2.0]]], dtype=np.float64)
+
+    E_ohm = analyzer.calc_e_ohm(B, M, dx=1.0, dy=1.0)
+
+    assert np.isfinite(E_ohm).all()
+    assert E_ohm[0, 0, 0, 1] > 1.0e20
+    assert np.isclose(E_ohm[0, 0, 1, 1], 0.5)

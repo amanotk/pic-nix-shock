@@ -17,6 +17,9 @@ dependencies = [
     "msgpack>=1.0",
     "tqdm>=4.60",
     "PyWavelets>=1.1",
+    "watchdog>=4.0.2",
+    "nest-asyncio>=1.6.0",
+    "aiofiles>=24.1.0",
     "pytest>=7.0",
     "ruff>=0.1.0",
 ]
@@ -28,6 +31,7 @@ mpi = ["mpi4py>=3.0"]
 reduce1d = "shock.reduce1d:main"
 wavetool = "shock.wavetool:main"
 mra = "shock.mra:main"
+wavefilter = "shock.wavefilter:main"
 vdist = "shock.vdist:main"
 printparam = "shock.printparam:cli_main"
 

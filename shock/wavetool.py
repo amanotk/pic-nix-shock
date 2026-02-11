@@ -29,6 +29,25 @@ except ImportError:
 import picnix
 
 
+def select_debug_indices(size, debug=False, debug_count=8, debug_mode="uniform"):
+    size = int(size)
+    if size <= 0:
+        return np.array([], dtype=np.int64)
+    if not debug:
+        return np.arange(size, dtype=np.int64)
+
+    debug_count = int(debug_count)
+    if debug_count <= 0:
+        raise ValueError("debug_count must be a positive integer")
+
+    count = min(debug_count, size)
+    if debug_mode == "head":
+        return np.arange(count, dtype=np.int64)
+    if debug_mode == "uniform":
+        return np.unique(np.linspace(0, size - 1, num=count, dtype=np.int64))
+    raise ValueError("Unknown debug_mode: {:s}. Use 'head' or 'uniform'.".format(str(debug_mode)))
+
+
 class DataAnalyzer(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
@@ -51,6 +70,51 @@ class DataAnalyzer(base.JobExecutor):
     def encode(self, data):
         return np.frombuffer(pickle.dumps(data), np.int8)
 
+    def diff_central_periodic(self, x, dx, axis):
+        return (np.roll(x, -1, axis=axis) - np.roll(x, 1, axis=axis)) / (2.0 * dx)
+
+    def diff_central_zero_boundary(self, x, dx, axis):
+        grad = np.zeros_like(x)
+        dst = [slice(None)] * x.ndim
+        src_m = [slice(None)] * x.ndim
+        src_p = [slice(None)] * x.ndim
+        dst[axis] = slice(1, -1)
+        src_m[axis] = slice(0, -2)
+        src_p[axis] = slice(2, None)
+        grad[tuple(dst)] = (x[tuple(src_p)] - x[tuple(src_m)]) / (2.0 * dx)
+        return grad
+
+    def calc_e_ohm(self, B, M, dx, dy):
+        Lambda = M[..., 0]
+        Gamma = M[..., 1:4]
+
+        Pxx = M[..., 4]
+        Pyy = M[..., 5]
+        Pxy = M[..., 7]
+        Pyz = M[..., 8]
+        Pzx = M[..., 9]
+
+        dPxx_dx = self.diff_central_zero_boundary(Pxx, dx, axis=1)
+        dPxy_dx = self.diff_central_zero_boundary(Pxy, dx, axis=1)
+        dPzx_dx = self.diff_central_zero_boundary(Pzx, dx, axis=1)
+        dPxy_dy = self.diff_central_periodic(Pxy, dy, axis=0)
+        dPyy_dy = self.diff_central_periodic(Pyy, dy, axis=0)
+        dPyz_dy = self.diff_central_periodic(Pyz, dy, axis=0)
+
+        divPi = np.stack(
+            [
+                dPxx_dx + dPxy_dy,
+                dPxy_dx + dPyy_dy,
+                dPzx_dx + dPyz_dy,
+            ],
+            axis=-1,
+        )
+
+        rhs = -np.cross(Gamma, B, axis=-1) + divPi
+        denom = Lambda
+        E_ohm = rhs / (denom[..., np.newaxis] + 1.0e-32)
+        return E_ohm
+
     def save(self, filename):
         profile = self.options.get("profile", None)
         config = self.options.get("config", None)
@@ -61,6 +125,9 @@ class DataAnalyzer(base.JobExecutor):
         step_min = self.options.get("step_min", 0)
         step_max = self.options.get("step_max", sys.maxsize)
         x_offset = self.options.get("x_offset", -80)
+        debug = self.options.get("debug", False)
+        debug_count = self.options.get("debug_count", 8)
+        debug_mode = self.options.get("debug_mode", "uniform")
 
         shock_position = self.options.get("shock_position", None)
         if shock_position is None:
@@ -88,12 +155,16 @@ class DataAnalyzer(base.JobExecutor):
         index_min = np.searchsorted(field_step, step_min)
         index_end = np.searchsorted(field_step, step_max)
         index_range = np.arange(index_min, index_end + 1)
+        debug_indices = select_debug_indices(index_range.size, debug, debug_count, debug_mode)
+        index_range = index_range[debug_indices]
+        Nt = index_range.size
+        if Nt == 0:
+            raise ValueError("No snapshots selected. Adjust step range or debug settings.")
 
         data = run.read_at(prefix, field_step[index_min], "uf")
         xc = data["xc"]
         yc = data["yc"]
 
-        Nt = index_end - index_min + 1
         Nx = num_xwindow
         Ny = yc.size
         Mx = Nx // num_average
@@ -118,6 +189,7 @@ class DataAnalyzer(base.JobExecutor):
                 fp.create_dataset("x", (Nt, Mx), dtype=np.float64, chunks=(1, Mx))
                 fp.create_dataset("y", (Nt, My), dtype=np.float64, chunks=(1, My))
                 fp.create_dataset("E", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
+                fp.create_dataset("E_ohm", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
                 fp.create_dataset("B", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
                 fp.create_dataset("J", (Nt, My, Mx, 8), dtype=np.float64, chunks=(1, My, Mx, 8))
                 fp.create_dataset("M", (Nt, My, Mx, 10), dtype=np.float64, chunks=(1, My, Mx, 10))
@@ -130,6 +202,9 @@ class DataAnalyzer(base.JobExecutor):
                 rewrite_all = True
             if "M" not in fp:
                 fp.create_dataset("M", (Nt, My, Mx, 10), dtype=np.float64, chunks=(1, My, Mx, 10))
+                rewrite_all = True
+            if "E_ohm" not in fp:
+                fp.create_dataset("E_ohm", (Nt, My, Mx, 3), dtype=np.float64, chunks=(1, My, Mx, 3))
                 rewrite_all = True
 
         # read step
@@ -168,6 +243,7 @@ class DataAnalyzer(base.JobExecutor):
             uf = delta * uf[..., xind - 1, :] + (1 - delta) * uf[..., xind, :]
             j = delta * j[..., xind - 1, :] + (1 - delta) * j[..., xind, :]
             m = delta * m[..., xind - 1, :] + (1 - delta) * m[..., xind, :]
+            e_ohm = self.calc_e_ohm(uf[..., 3:6], m, num_average * dh, num_average * dh)
 
             # store data
             with h5py.File(filename, "a") as fp:
@@ -176,6 +252,7 @@ class DataAnalyzer(base.JobExecutor):
                 fp["x"][i, ...] = xnew
                 fp["y"][i, ...] = yc
                 fp["E"][i, ...] = uf[..., 0:3]
+                fp["E_ohm"][i, ...] = e_ohm
                 fp["B"][i, ...] = uf[..., 3:6]
                 fp["J"][i, ...] = j
                 fp["M"][i, ...] = m
@@ -189,6 +266,7 @@ class SummaryPlotter(base.JobExecutor):
                 self.options[key] = self.options["plot"][key]
         self.plot_dict = None
         self.parameter = None  # initialized later
+        self.shock_position = None
 
     def read_parameter(self):
         # ignore
@@ -200,10 +278,21 @@ class SummaryPlotter(base.JobExecutor):
 
         step_min = self.options.get("step_min", 0)
         step_max = self.options.get("step_max", sys.maxsize)
+        debug = self.options.get("debug", False)
+        debug_count = self.options.get("debug_count", 8)
+        debug_mode = self.options.get("debug_mode", "uniform")
 
         # read parameters here
         with h5py.File(filename, "r") as fp:
             self.parameter = pickle.loads(fp["config"][()])["parameter"]
+
+        self.shock_position = self.options.get("shock_position", None)
+        if self.shock_position is None:
+            reduce1d_result = (
+                pathlib.Path(self.get_dirname()).parent / "reduce1d" / "reduce1d_result.toml"
+            )
+            if reduce1d_result.exists():
+                self.shock_position = toml.load(str(reduce1d_result)).get("shock_position", None)
 
         wci = np.sqrt(self.parameter["sigma"]) / self.parameter["mime"]
         png = self.get_filename(output, "")
@@ -213,10 +302,13 @@ class SummaryPlotter(base.JobExecutor):
             step = fp["step"]
             index_min = np.searchsorted(step, step_min)
             index_max = np.searchsorted(step, step_max)
+            frame_indices = np.arange(index_min, index_max, dtype=np.int64)
+            debug_indices = select_debug_indices(frame_indices.size, debug, debug_count, debug_mode)
+            frame_indices = frame_indices[debug_indices]
 
-            for i in tqdm.tqdm(range(index_min, index_max)):
+            for i in tqdm.tqdm(frame_indices):
                 # read data
-                X, Y, Az, vars, labels = self.get_plot_variables(fp, i)
+                X, Y, Az, vars, labels, xlim = self.get_plot_variables(fp, i)
 
                 # apply bandpass filter if requested
                 if "bandpass" in self.options:
@@ -225,7 +317,7 @@ class SummaryPlotter(base.JobExecutor):
                     dh = xx[1] - xx[0]
                     vars = utils.bandpass_filter2d(vars, kl, kh, dk, dh)
 
-                self.plot(X, Y, t[i] * wci, Az, vars, labels)
+                self.plot(X, Y, t[i] * wci, Az, vars, labels, xlim=xlim)
                 self.save(png + "-{:08d}.png".format(step[i]))
 
         # convert to mp4
@@ -250,6 +342,7 @@ class SummaryPlotter(base.JobExecutor):
         xx = fileobj["x"][index, ...]
         yy = fileobj["y"][index, ...]
         X, Y = np.meshgrid(xx, yy)
+        xlim = self.get_x_window(xx, yy, fileobj["t"][index])
 
         if quantity == "field":
             E = fileobj["E"][index, ...]
@@ -303,21 +396,63 @@ class SummaryPlotter(base.JobExecutor):
         B = fileobj["B"][index, ...]
         Az = utils.calc_vector_potential2d(B, dh)
 
-        return X, Y, Az, vars, labels
+        return X, Y, Az, vars, labels, xlim
 
-    def plot(self, X, Y, time, Az, vars, labels):
-        if self.plot_dict is None:
-            self.plot_dict = self.plot_new(X, Y, Az, vars, labels)
+    def get_x_window(self, xx, yy, time):
+        xx = np.asarray(xx)
+        yy = np.asarray(yy)
+        xmin = float(xx.min())
+        xmax = float(xx.max())
+        ymin = float(yy.min())
+        ymax = float(yy.max())
+
+        aspect_ratio = float(self.options.get("aspect_ratio", 2.0))
+        if aspect_ratio <= 0.0:
+            raise ValueError("aspect_ratio must be positive")
+
+        x_center_offset = float(self.options.get("x_center_offset", 0.0))
+        if self.shock_position is not None:
+            x_center = float(np.polyval(self.shock_position, time)) + x_center_offset
         else:
-            self.plot_dict = self.plot_update(X, Y, Az, vars, labels)
+            x_center = 0.5 * (xmin + xmax) + x_center_offset
+
+        ly = ymax - ymin
+        lx = xmax - xmin
+        if ly <= 0.0 or lx <= 0.0:
+            return xmin, xmax
+
+        target_lx = aspect_ratio * ly
+        if target_lx >= lx:
+            return xmin, xmax
+
+        left = x_center - 0.5 * target_lx
+        right = x_center + 0.5 * target_lx
+        if left < xmin:
+            right += xmin - left
+            left = xmin
+        if right > xmax:
+            left -= right - xmax
+            right = xmax
+
+        left = max(left, xmin)
+        right = min(right, xmax)
+        return left, right
+
+    def plot(self, X, Y, time, Az, vars, labels, xlim=None):
+        if self.plot_dict is None:
+            self.plot_dict = self.plot_new(X, Y, Az, vars, labels, xlim=xlim)
+        else:
+            self.plot_dict = self.plot_update(X, Y, Az, vars, labels, xlim=xlim)
 
         plt.suptitle(r"$\Omega_{{ci}} t$ = {:5.2f}".format(time))
 
-    def plot_new(self, X, Y, Az, vars, labels):
+    def plot_new(self, X, Y, Az, vars, labels, xlim=None):
         xmin = X.min()
         xmax = X.max()
         ymin = Y.min()
         ymax = Y.max()
+        if xlim is not None:
+            xmin, xmax = xlim
 
         # automatic colorbar limits
         vlim = base.get_vlim(vars, 10)
@@ -374,11 +509,13 @@ class SummaryPlotter(base.JobExecutor):
 
         return {"fig": fig, "axs": axs, "img": img, "cnt": cnt, "cxs": cxs, "clb": clb}
 
-    def plot_update(self, X, Y, Az, vars, labels):
+    def plot_update(self, X, Y, Az, vars, labels, xlim=None):
         xmin = X.min()
         xmax = X.max()
         ymin = Y.min()
         ymax = Y.max()
+        if xlim is not None:
+            xmin, xmax = xlim
         vlim = base.get_vlim(vars, 10)
 
         fig = self.plot_dict["fig"]
@@ -429,22 +566,64 @@ def main():
         default="analyze",
         help="Type of job to perform (analyze, plot). Can be combined with comma.",
     )
+    parser.add_argument(
+        "-p",
+        "--prefix",
+        type=str,
+        default="field",
+        help="diagnostic prefix to read from run data",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="run a reduced subset of snapshots",
+    )
+    parser.add_argument(
+        "--debug-count",
+        type=int,
+        default=8,
+        help="number of snapshots to process in debug mode",
+    )
+    parser.add_argument(
+        "--debug-mode",
+        type=str,
+        default="uniform",
+        choices=["head", "uniform"],
+        help="snapshot selection mode for debug subset",
+    )
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
     config = args.config[0]
     output = args.output
+    prefix = args.prefix
+    debug = args.debug
+    debug_count = args.debug_count
+    debug_mode = args.debug_mode
+
+    def apply_runtime_options(obj):
+        obj.options["prefix"] = prefix
+        obj.options["debug"] = debug
+        obj.options["debug_count"] = debug_count
+        obj.options["debug_mode"] = debug_mode
+        dirname = obj.options.get("dirname", None)
+        if dirname is not None:
+            suffix = "-{:s}".format(str(prefix))
+            if not dirname.endswith(suffix):
+                obj.options["dirname"] = dirname + suffix
 
     jobs = args.job.split(",")
 
     # perform analyze job first if requested
     if "analyze" in jobs:
         obj = DataAnalyzer(config)
+        apply_runtime_options(obj)
         obj.main(output)
         jobs = [j for j in jobs if j != "analyze"]
 
     # check prerequisite for remaining jobs
     if len(jobs) > 0:
         obj = DataAnalyzer(config)
+        apply_runtime_options(obj)
         filename = obj.get_filename(output, ".h5")
         if not os.path.exists(filename):
             sys.exit("Error: File '{}' not found. Please run 'analyze' job first.".format(filename))
@@ -453,6 +632,7 @@ def main():
     for job in jobs:
         if job == "plot":
             obj = SummaryPlotter(config)
+            apply_runtime_options(obj)
             obj.main(output)
         else:
             raise ValueError("Unknown job: {:s}".format(job))

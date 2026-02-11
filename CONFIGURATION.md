@@ -47,6 +47,10 @@ fit_range = [5.0, 16.0]
 
 Example: `sample/wavetool-config.toml`
 
+`wavetool.py` takes diagnostic prefix from CLI option `--prefix` (default:
+`field`), not from TOML. Output directory is automatically suffixed as
+`<dirname>-<prefix>`.
+
 ```toml
 run = "run1"
 dirname = "wavetool"
@@ -62,6 +66,19 @@ shock_position = [0.01, -75.0]
 [plot]
 fps = 10
 quantity = "field"
+aspect_ratio = 2.0
+x_center_offset = 0.0
+```
+
+`aspect_ratio` controls the x-window length as `x_length / y_length` while keeping
+equal axis scaling. The full y-range is always shown, and x-window center is
+`shock_position(t) + x_center_offset` (fallback: x-domain center if shock position is unavailable).
+
+Example commands:
+
+```bash
+python shock/wavetool.py -j analyze --prefix field sample/wavetool-config.toml
+python shock/wavetool.py -j plot --prefix field sample/wavetool-config.toml
 ```
 
 ## `vdist.py`
@@ -88,6 +105,74 @@ overwrite = true
 rawfile = "wavetool"
 mrafile = "mra"
 ```
+
+## `wavefilter.py`
+
+```toml
+run = "run1"
+dirname = "wavetool-field"
+profile = "data/profile.msgpack"
+overwrite = true
+
+[analyze]
+rawfile = "wavetool"
+wavefile = "wavefilter"
+fc_low = 0.5
+# fc_high = 1.5
+order = 4
+
+[plot]
+wavefile = "wavefilter"
+output = "wavefilter"
+fps = 10
+quantity = "wave"
+aspect_ratio = 2.0
+x_center_offset = 0.0
+# quantity = "field"
+# E_lim = [-0.2, 0.2]
+# B_lim = [-0.2, 0.2]
+smooth_sigma = 0.5
+B_wave_lim = [-0.25, 0.25]
+B_env_lim = [0.0, 0.5]
+B_abs_lim = [0.5, 5.0]
+S_para_lim = [-0.5, 0.5]
+```
+
+`wavefilter.py` chooses the temporal filter mode from cutoff keys:
+
+- `fc_low` + `fc_high`: band-pass
+- `fc_low` only: high-pass
+- `fc_high` only: low-pass
+
+Cutoff frequencies are in inverse time units of the input HDF5 `t` array.
+Sampling frequency is inferred from `t` and requires equally sampled time points.
+
+`smooth_sigma` applies optional Gaussian smoothing (in cell units) during plotting.
+Smoothing uses periodic boundary in `y` (`wrap`) and non-periodic boundary in `x` (`nearest`).
+Set `smooth_sigma = 0` to disable smoothing.
+
+`aspect_ratio` controls the x-window length as `x_length / y_length` while keeping
+equal axis scaling. The full y-range is always shown, and x-window center is
+`shock_position(t) + x_center_offset` (fallback: x-domain center if shock position is unavailable).
+
+`analyze` stores filtered `E` (from `E_ohm`) and filtered `B`.
+`plot` computes Poynting flux from these filtered fields as
+`S = E x B` (in the project normalization; no explicit `4\pi` factor),
+and plots `S_parallel` normalized by `c E_0 B_0`.
+`S_parallel` is the projection of `S` onto the local, instantaneous
+ambient magnetic-field direction `B_raw / |B_raw|`.
+
+`plot.quantity` selects panel content:
+
+- `wave` (default): `|B|, B_envelope, S_parallel, \delta Bx, \delta By, \delta Bz`
+- `field`: `Ex/E0, Ey/E0, Ez/E0, Bx/B0, By/B0, Bz/B0`
+
+For `field`, normalization follows `wavetool.py`:
+
+- `B0 = sqrt(sigma) / sqrt(1 + u0^2)`
+- `E0 = B0 * u0 / sqrt(1 + u0^2)`
+
+Optional `field` color limits are `E_lim` and `B_lim`.
 
 ## Environment Variables
 
