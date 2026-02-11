@@ -47,6 +47,10 @@ fit_range = [5.0, 16.0]
 
 Example: `sample/wavetool-config.toml`
 
+`wavetool.py` takes diagnostic prefix from CLI option `--prefix` (default:
+`field`), not from TOML. Output directory is automatically suffixed as
+`<dirname>-<prefix>`.
+
 ```toml
 run = "run1"
 dirname = "wavetool"
@@ -62,6 +66,13 @@ shock_position = [0.01, -75.0]
 [plot]
 fps = 10
 quantity = "field"
+```
+
+Example commands:
+
+```bash
+python shock/wavetool.py -j analyze --prefix field sample/wavetool-config.toml
+python shock/wavetool.py -j plot --prefix field sample/wavetool-config.toml
 ```
 
 ## `vdist.py`

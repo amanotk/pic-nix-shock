@@ -480,22 +480,40 @@ def main():
         default="analyze",
         help="Type of job to perform (analyze, plot). Can be combined with comma.",
     )
+    parser.add_argument(
+        "-p",
+        "--prefix",
+        type=str,
+        default="field",
+        help="diagnostic prefix to read from run data",
+    )
     parser.add_argument("config", nargs=1, help="configuration file for the job")
     args = parser.parse_args()
     config = args.config[0]
     output = args.output
+    prefix = args.prefix
+
+    def apply_prefix_options(obj):
+        obj.options["prefix"] = prefix
+        dirname = obj.options.get("dirname", None)
+        if dirname is not None:
+            suffix = "-{:s}".format(str(prefix))
+            if not dirname.endswith(suffix):
+                obj.options["dirname"] = dirname + suffix
 
     jobs = args.job.split(",")
 
     # perform analyze job first if requested
     if "analyze" in jobs:
         obj = DataAnalyzer(config)
+        apply_prefix_options(obj)
         obj.main(output)
         jobs = [j for j in jobs if j != "analyze"]
 
     # check prerequisite for remaining jobs
     if len(jobs) > 0:
         obj = DataAnalyzer(config)
+        apply_prefix_options(obj)
         filename = obj.get_filename(output, ".h5")
         if not os.path.exists(filename):
             sys.exit("Error: File '{}' not found. Please run 'analyze' job first.".format(filename))
@@ -504,6 +522,7 @@ def main():
     for job in jobs:
         if job == "plot":
             obj = SummaryPlotter(config)
+            apply_prefix_options(obj)
             obj.main(output)
         else:
             raise ValueError("Unknown job: {:s}".format(job))
