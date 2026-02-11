@@ -1,0 +1,39 @@
+run = "run1"
+dirname = "wavetool-field"
+profile = "data/profile.msgpack"
+overwrite = true
+
+[analyze]
+wavefile = "wavefilter"
+fitfile = "wavefit"
+snapshot_index = 0
+
+# Gaussian window in physical units
+sigma = 4.0
+
+# Candidate selection from |B| envelope
+max_candidates = 24
+envelope_smooth_sigma = 0.5
+envelope_threshold_fraction = 0.50
+candidate_min_distance_sigma = 3.0
+
+# Fit region around each candidate
+patch_radius_sigma = 3.0
+fit_min_points = 64
+
+# Circular-wave fit bounds/initial values
+kx_init = 0.30
+kx_min = 0.10
+kx_max = 1.00
+ky_init = 0.00
+ky_abs_max = 1.00
+
+# Quality flags (fits are stored even if low_quality)
+min_support_fraction = 0.50
+good_nrmse_max = 0.80
+good_r2_min = 0.00
+
+# Diagnostic plots for visual inspection
+debug_plot = true
+debug_plot_count = 8
+debug_plot_prefix = "wavefit-debug"

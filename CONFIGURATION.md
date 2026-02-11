@@ -174,6 +174,50 @@ For `field`, normalization follows `wavetool.py`:
 
 Optional `field` color limits are `E_lim` and `B_lim`.
 
+## `wavefit.py`
+
+Example: `sample/wavefit-config.toml`
+
+`wavefit.py` reads filtered fields from `wavefilter` output and fits a
+localized circularly polarized plane-wave model to selected candidate points
+on one snapshot.
+
+```toml
+run = "run1"
+dirname = "wavetool-field"
+profile = "data/profile.msgpack"
+overwrite = true
+
+[analyze]
+wavefile = "wavefilter"
+fitfile = "wavefit"
+snapshot_index = 0
+sigma = 4.0
+max_candidates = 24
+envelope_smooth_sigma = 0.5
+envelope_threshold_fraction = 0.50
+candidate_min_distance_sigma = 3.0
+patch_radius_sigma = 3.0
+kx_init = 0.30
+kx_min = 0.10
+kx_max = 1.00
+ky_init = 0.00
+ky_abs_max = 1.00
+debug_plot = true
+debug_plot_count = 8
+debug_plot_prefix = "wavefit-debug"
+```
+
+Notes:
+
+- `sigma` is the Gaussian-window width in physical `x`/`y` units.
+- `y` is treated as periodic in both candidate spacing and fitting window.
+- Data and model are both multiplied by the same Gaussian window before
+  residual evaluation.
+- Output is stored in `fitfile.h5` under `snapshots/<step>/...` with one row
+  per candidate fit and quality metrics (`nrmse`, `r2E`, `r2B`, `redchi`, etc.).
+- Optional diagnostic plots are saved with prefix `debug_plot_prefix`.
+
 ## Environment Variables
 
 - `SHOCK_DATA_ROOT` default: `./data`

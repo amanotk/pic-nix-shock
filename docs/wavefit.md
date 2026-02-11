@@ -69,3 +69,59 @@ If we assume that the window function is fixed (i.e., $x_0$, $y_0$, $\sigma$ are
 - The general localized wave model (14 parameters): $k_x$, $k_y$, $f_i (i=1,\ldots,6)$, $\phi_i (i=1,\ldots,6)$.
 - The circularly polarized wave model (6 parameters): $k_x$, $k_y$, $E_w$, $B_w$, $\phi_E$, $\phi_B$.
 
+## Goodness of Fit Criteria
+
+Current wavefit implementation evaluates goodness with two conditions:
+
+1. Balanced error criterion:
+   - `nrmse_balanced <= 0.4`
+   - where
+     ```math
+     nrmse_{balanced} = \sqrt{\frac{1}{2}\left(nrmse_E^2 + nrmse_B^2\right)}
+     ```
+     and
+     ```math
+     nrmse_E = \frac{\mathrm{rms}(E_{data}-E_{model})}{\mathrm{rms}(E_{data})},
+     \quad
+     nrmse_B = \frac{\mathrm{rms}(B_{data}-B_{model})}{\mathrm{rms}(B_{data})}
+     ```
+2. Scale-separation criterion:
+   - `lambda <= 4 * sigma`
+   - with
+     ```math
+     k = \sqrt{k_x^2 + k_y^2},
+     \quad
+     \lambda = \frac{2\pi}{k}
+     ```
+
+The fit is marked as good only when both conditions are satisfied.
+
+## Diagnostic Plot Function (Reusable)
+
+`shock/wavefit.py` provides:
+
+- `save_quickcheck_plot_12panel(filename, fit_result, title=None, rms_normalize=True)`
+
+This creates a 2x6 panel diagnostic plot for one fitted candidate:
+
+- top row: data
+- bottom row: model
+- columns: `Ex, Ey, Ez, Bx, By, Bz`
+
+When `rms_normalize=True` (recommended), electric and magnetic components are
+normalized separately (`E/rmsE`, `B/rmsB`) to make visual comparison robust
+when `|E| << |B|`.
+
+### Minimal Usage
+
+```python
+from shock import wavefit
+
+# fit_result returned by wavefit.fit_one_candidate(...)
+wavefit.save_quickcheck_plot_12panel(
+    "quickcheck-example.png",
+    fit_result,
+    title="candidate quickcheck",
+    rms_normalize=True,
+)
+```
