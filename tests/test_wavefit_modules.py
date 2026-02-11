@@ -6,7 +6,7 @@ import numpy as np
 
 
 def test_wavefit_model_periodic_delta_wraps_minimum_distance():
-    from shock.wavefit_model import periodic_delta
+    from shock.wavefit.model import periodic_delta
 
     period = 10.0
     center = 9.0
@@ -16,7 +16,7 @@ def test_wavefit_model_periodic_delta_wraps_minimum_distance():
 
 
 def test_wavefit_model_evaluate_quality_threshold_logic():
-    from shock.wavefit_model import evaluate_fit_quality
+    from shock.wavefit.model import evaluate_fit_quality
 
     options = {"good_nrmse_bal_max": 0.4, "good_lambda_factor_max": 4.0}
 
@@ -33,7 +33,7 @@ def test_wavefit_model_evaluate_quality_threshold_logic():
 
 
 def test_wavefit_candidates_pick_points_respects_spacing():
-    from shock.wavefit_candidates import pick_candidate_points
+    from shock.wavefit.candidates import pick_candidate_points
 
     xx = np.linspace(0.0, 20.0, 41)
     yy = np.linspace(0.0, 10.0, 21)
@@ -55,7 +55,7 @@ def test_wavefit_candidates_pick_points_respects_spacing():
 
 
 def test_wavefit_plot_quickcheck_smoke_writes_png(temp_dir):
-    from shock.wavefit_plot import save_quickcheck_plot_12panel
+    from shock.wavefit.plot import save_quickcheck_plot_12panel
 
     ny, nx = 16, 18
     patch_x = np.linspace(0.0, 1.0, nx)
@@ -87,8 +87,8 @@ def test_wavefit_plot_quickcheck_smoke_writes_png(temp_dir):
 
 
 def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
-    from shock.wavefit_fit import fit_one_candidate
-    from shock.wavefit_model import build_xy, circular_model_cartesian
+    from shock.wavefit.fit import fit_one_candidate
+    from shock.wavefit.model import build_xy, circular_model_cartesian
 
     xx = np.linspace(-12.0, 12.0, 29)
     yy = np.linspace(-8.0, 8.0, 23)
