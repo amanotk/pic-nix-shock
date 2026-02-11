@@ -110,7 +110,7 @@ mrafile = "mra"
 
 ```toml
 run = "run1"
-dirname = "wavetool"
+dirname = "wavetool-field"
 profile = "data/profile.msgpack"
 overwrite = true
 
