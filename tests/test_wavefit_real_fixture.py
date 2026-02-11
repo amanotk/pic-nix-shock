@@ -37,6 +37,13 @@ def test_wavefit_real_fixture_examples_match_quality_labels(root_dir):
 
     data, metadata = _load_wavefit_fixture(root_dir)
     fit_options = dict(metadata["fit_options"])
+    fit_options.update(
+        {
+            "kx_init_scan": [0.0, 0.15, 0.5],
+            "ky_init_scan": [-0.5, 0.2, 0.5, 0.8],
+            "helicity_scan": [1.0, -1.0],
+        }
+    )
 
     for example in metadata["examples"]:
         E, B = _prepare_fields(example, data, metadata)

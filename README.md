@@ -150,7 +150,7 @@ python shock/wavefilter.py -j analyze,plot sample/wavefilter-config.toml
 ### Fit localized wave model on one snapshot
 
 ```bash
-python shock/wavefit.py -j analyze sample/wavefit-config.toml
+python -m shock.wavefit -j analyze sample/wavefit-config.toml
 ```
 
 `wavefit.py` reads filtered `E` and `B` fields from `wavefilter` output,

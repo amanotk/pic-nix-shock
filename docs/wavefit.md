@@ -98,7 +98,7 @@ The fit is marked as good only when both conditions are satisfied.
 
 ## Diagnostic Plot Function (Reusable)
 
-`shock/wavefit.py` provides:
+`shock/wavefit/plot.py` provides:
 
 - `save_quickcheck_plot_12panel(filename, fit_result, title=None, rms_normalize=True)`
 
