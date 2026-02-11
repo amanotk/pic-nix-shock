@@ -157,13 +157,14 @@ equal axis scaling. The full y-range is always shown, and x-window center is
 
 `analyze` stores filtered `E` (from `E_ohm`) and filtered `B`.
 `plot` computes Poynting flux from these filtered fields as
-`S = E x B` (in the project normalization; no explicit `4\pi` factor).
+`S = E x B` (in the project normalization; no explicit `4\pi` factor),
+and plots `S_parallel` normalized by `c E_0 B_0`.
 `S_parallel` is the projection of `S` onto the local, instantaneous
 ambient magnetic-field direction `B_raw / |B_raw|`.
 
 `plot.quantity` selects panel content:
 
-- `wave` (default): `\delta Bx, \delta By, \delta Bz, |B|, B_envelope, S_parallel`
+- `wave` (default): `|B|, B_envelope, S_parallel, \delta Bx, \delta By, \delta Bz`
 - `field`: `Ex/E0, Ey/E0, Ez/E0, Bx/B0, By/B0, Bz/B0`
 
 For `field`, normalization follows `wavetool.py`:

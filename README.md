@@ -140,7 +140,7 @@ python shock/wavetool.py -j plot --prefix field sample/wavetool-config.toml
 outputs under `SHOCK_WORK_ROOT/run/<dirname>-<prefix>/...` to avoid collisions
 between different prefix runs.
 
-### Analyze wave activity (high-pass filter)
+### Analyze wave activity (low/high/band-pass filter)
 
 ```bash
 # sample config expects SHOCK_DATA_ROOT/run1/data/profile.msgpack
