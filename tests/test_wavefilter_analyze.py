@@ -45,16 +45,6 @@ def test_wavefilter_analyze_writes_filtered_fields(temp_dir, monkeypatch):
         axis=-1,
     )
 
-    J = np.zeros((nt, ny, nx, 8), dtype=np.float64)
-    J[..., 0] = -1.0
-    J[..., 4] = 1.0
-    J[..., 1] = -0.2 + 0.03 * np.sin(2.0 * np.pi * tt)
-    J[..., 2] = 0.05 * np.cos(2.0 * np.pi * tt)
-    J[..., 3] = 0.02 * np.sin(4.0 * np.pi * tt)
-    J[..., 5] = 0.15 + 0.02 * np.cos(2.0 * np.pi * tt)
-    J[..., 6] = -0.04 * np.sin(2.0 * np.pi * tt)
-    J[..., 7] = 0.01 * np.cos(4.0 * np.pi * tt)
-
     with h5py.File(raw_path, "w") as fp:
         fp.create_dataset("step", data=step)
         fp.create_dataset("t", data=t)
@@ -62,7 +52,6 @@ def test_wavefilter_analyze_writes_filtered_fields(temp_dir, monkeypatch):
         fp.create_dataset("y", data=y)
         fp.create_dataset("B", data=B)
         fp.create_dataset("E_ohm", data=E_ohm)
-        fp.create_dataset("J", data=J)
 
     config_path = temp_dir / "wavefilter.toml"
     config_path.write_text(
@@ -76,8 +65,7 @@ def test_wavefilter_analyze_writes_filtered_fields(temp_dir, monkeypatch):
                 "[analyze]",
                 'rawfile = "wavetool"',
                 'wavefile = "wavefilter"',
-                "fs = 4.0",
-                "fc = 0.5",
+                "fc_low = 0.5",
                 "order = 2",
             ]
         )
@@ -94,9 +82,5 @@ def test_wavefilter_analyze_writes_filtered_fields(temp_dir, monkeypatch):
     with h5py.File(out_path, "r") as fp:
         assert fp["B"].shape == (nt, ny, nx, 3)
         assert fp["E"].shape == (nt, ny, nx, 3)
-        assert fp["Ve"].shape == (nt, ny, nx, 3)
-        assert fp["Vi"].shape == (nt, ny, nx, 3)
         assert np.all(np.isfinite(fp["B"][...]))
         assert np.all(np.isfinite(fp["E"][...]))
-        assert np.all(np.isfinite(fp["Ve"][...]))
-        assert np.all(np.isfinite(fp["Vi"][...]))

@@ -1,3 +1,4 @@
+run = "run1"
 dirname = "wavetool"
 profile = "data/profile.msgpack"
 overwrite = true
@@ -5,8 +6,7 @@ overwrite = true
 [analyze]
 rawfile = "wavetool"
 wavefile = "wavefilter"
-fs = 4.0
-fc = 0.5
+fc_low = 0.5
 order = 4
 
 [plot]

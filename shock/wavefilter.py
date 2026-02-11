@@ -22,12 +22,58 @@ except ImportError:
 import picnix
 
 
-def highpass(x, fs, fc, order=4):
+def get_sampling_frequency(t, rtol=1.0e-6, atol=0.0):
+    t = np.asarray(t)
+    if t.ndim != 1 or t.size < 2:
+        raise ValueError("time array must be one-dimensional with at least 2 samples")
+
+    dt = np.diff(t)
+    if not np.all(np.isfinite(dt)):
+        raise ValueError("time array contains non-finite values")
+    if np.any(dt <= 0.0):
+        raise ValueError("time array must be strictly increasing")
+    if not np.allclose(dt, dt[0], rtol=rtol, atol=atol):
+        raise ValueError("time array must be equally sampled")
+
+    return 1.0 / dt[0]
+
+
+def temporal_filter(x, fs, fc_low=None, fc_high=None, order=4):
     nyq = 0.5 * fs
-    wn = fc / nyq
-    if not (0.0 < wn < 1.0):
-        raise ValueError("highpass cutoff must satisfy 0 < fc < fs/2")
-    b, a = signal.butter(order, wn, btype="high", analog=False)
+
+    if fc_low is not None:
+        fc_low = float(fc_low)
+        if not np.isfinite(fc_low):
+            raise ValueError("fc_low must be finite")
+        if not (0.0 < fc_low < nyq):
+            raise ValueError(
+                "fc_low must satisfy 0 < fc_low < fs/2 (Nyquist frequency = {:g})".format(nyq)
+            )
+
+    if fc_high is not None:
+        fc_high = float(fc_high)
+        if not np.isfinite(fc_high):
+            raise ValueError("fc_high must be finite")
+        if not (0.0 < fc_high < nyq):
+            raise ValueError(
+                "fc_high must satisfy 0 < fc_high < fs/2 (Nyquist frequency = {:g})".format(nyq)
+            )
+
+    if fc_low is not None and fc_high is not None:
+        if not (fc_low < fc_high):
+            raise ValueError("fc_low must satisfy fc_low < fc_high")
+        wn = [fc_low, fc_high]
+        btype = "bandpass"
+    elif fc_low is not None:
+        wn = fc_low
+        btype = "highpass"
+    elif fc_high is not None:
+        wn = fc_high
+        btype = "lowpass"
+    else:
+        raise ValueError("At least one of fc_low or fc_high must be provided")
+
+    b, a = signal.butter(order, wn, btype=btype, analog=False, fs=fs)
     return signal.filtfilt(b, a, x, axis=0)
 
 
@@ -48,8 +94,8 @@ class WaveFilterAnalyzer(base.JobExecutor):
 
     def apply_filter_and_save(self, rawfile, wavefile):
         overwrite = self.options.get("overwrite", False)
-        fs = self.options.get("fs", 4.0)
-        fc = self.options.get("fc", 0.5)
+        fc_low = self.options.get("fc_low", None)
+        fc_high = self.options.get("fc_high", None)
         order = self.options.get("order", 4)
 
         if os.path.exists(wavefile) and not overwrite:
@@ -59,28 +105,12 @@ class WaveFilterAnalyzer(base.JobExecutor):
         with h5py.File(rawfile, "r") as fp_in:
             B = fp_in["B"][()]
             E = fp_in["E_ohm"][()]
-            J = fp_in["J"][()]
+            t = fp_in["t"][()]
 
-            Je = J[..., 0:4]
-            Ji = J[..., 4:8]
+            fs = get_sampling_frequency(t)
 
-            BB = np.linalg.norm(B, axis=-1)
-            BB = np.where(BB > 0.0, BB, 1.0)
-            B_hat = B / BB[..., np.newaxis]
-
-            Re = np.where(np.abs(Je[..., 0:1]) > 0.0, Je[..., 0:1], 1.0)
-            Ri = np.where(np.abs(Ji[..., 0:1]) > 0.0, Ji[..., 0:1], 1.0)
-            Ve = Je[..., 1:4] / Re
-            Vi = Ji[..., 1:4] / Ri
-            Ve_para = np.sum(Ve * B_hat, axis=-1)
-            Vi_para = np.sum(Vi * B_hat, axis=-1)
-            Ve = Ve - Ve_para[..., np.newaxis] * B_hat
-            Vi = Vi - Vi_para[..., np.newaxis] * B_hat
-
-            B_hp = highpass(B, fs=fs, fc=fc, order=order)
-            E_hp = highpass(E, fs=fs, fc=fc, order=order)
-            Ve_hp = highpass(Ve, fs=fs, fc=fc, order=order)
-            Vi_hp = highpass(Vi, fs=fs, fc=fc, order=order)
+            B_hp = temporal_filter(B, fs=fs, fc_low=fc_low, fc_high=fc_high, order=order)
+            E_hp = temporal_filter(E, fs=fs, fc_low=fc_low, fc_high=fc_high, order=order)
 
             with h5py.File(wavefile, "w") as fp_out:
                 fp_out.create_dataset("step", data=fp_in["step"][()])
@@ -89,8 +119,6 @@ class WaveFilterAnalyzer(base.JobExecutor):
                 fp_out.create_dataset("y", data=fp_in["y"][()])
                 fp_out.create_dataset("B", data=B_hp)
                 fp_out.create_dataset("E", data=E_hp)
-                fp_out.create_dataset("Ve", data=Ve_hp)
-                fp_out.create_dataset("Vi", data=Vi_hp)
 
 
 class WaveFilterPlotter(base.JobExecutor):
@@ -136,6 +164,7 @@ class WaveFilterPlotter(base.JobExecutor):
 
         B_raw = fileobj_raw["B"][index, ...] / B0
         BB = np.linalg.norm(B_raw, axis=-1)
+        Bhat_raw = B_raw / (BB[..., np.newaxis] + 1.0e-32)
         Az = utils.calc_vector_potential2d(B_raw, dh)
 
         xx = fileobj_wave["x"][index, ...]
@@ -143,11 +172,13 @@ class WaveFilterPlotter(base.JobExecutor):
         X, Y = np.meshgrid(xx, yy)
 
         Bf_hp = fileobj_wave["B"][index, ...] / B0
-        Ve_hp = fileobj_wave["Ve"][index, ...]
+        Ew_hp = fileobj_wave["E"][index, ...]
+        Bw_hp = fileobj_wave["B"][index, ...]
 
         B_absolute = BB
         B_envelope = np.linalg.norm(Bf_hp, axis=-1)
-        S_parallel = -np.sum(Bf_hp * Ve_hp, axis=-1) * BB
+        S = np.cross(Ew_hp, Bw_hp, axis=-1) / (B0**2)
+        S_parallel = np.sum(S * Bhat_raw, axis=-1)
 
         vars = [
             Bf_hp[..., 0],
@@ -191,15 +222,14 @@ def main():
         obj.main()
         jobs = [j for j in jobs if j != "analyze"]
 
-    if len(jobs) > 0:
-        obj = WaveFilterAnalyzer(config)
-        wavefile = obj.get_filename(obj.options.get("wavefile", "wavefilter"), ".h5")
-        if not os.path.exists(wavefile):
-            sys.exit("Error: File '{}' not found. Please run 'analyze' job first.".format(wavefile))
-
     for job in jobs:
         if job == "plot":
             obj = WaveFilterPlotter(config)
+            wavefile = obj.get_filename(obj.options.get("wavefile", "wavefilter"), ".h5")
+            if not os.path.exists(wavefile):
+                sys.exit(
+                    "Error: File '{}' not found. Please run 'analyze' job first.".format(wavefile)
+                )
             obj.main()
         else:
             raise ValueError("Unknown job: {:s}".format(job))

@@ -143,6 +143,7 @@ between different prefix runs.
 ### Analyze wave activity (high-pass filter)
 
 ```bash
+# sample config expects SHOCK_DATA_ROOT/run1/data/profile.msgpack
 python shock/wavefilter.py -j analyze,plot sample/wavefilter-config.toml
 ```
 

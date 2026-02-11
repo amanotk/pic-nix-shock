@@ -103,15 +103,16 @@ mrafile = "mra"
 ## `wavefilter.py`
 
 ```toml
+run = "run1"
 dirname = "wavetool"
-profile = "profile.msgpack"
+profile = "data/profile.msgpack"
 overwrite = true
 
 [analyze]
 rawfile = "wavetool"
 wavefile = "wavefilter"
-fs = 4.0
-fc = 0.5
+fc_low = 0.5
+# fc_high = 1.5
 order = 4
 
 [plot]
@@ -123,6 +124,21 @@ B_env_lim = [0.0, 0.5]
 B_abs_lim = [0.5, 5.0]
 S_para_lim = [-0.5, 0.5]
 ```
+
+`wavefilter.py` chooses the temporal filter mode from cutoff keys:
+
+- `fc_low` + `fc_high`: band-pass
+- `fc_low` only: high-pass
+- `fc_high` only: low-pass
+
+Cutoff frequencies are in inverse time units of the input HDF5 `t` array.
+Sampling frequency is inferred from `t` and requires equally sampled time points.
+
+`analyze` stores filtered `E` (from `E_ohm`) and filtered `B`.
+`plot` computes Poynting flux from these filtered fields as
+`S = E x B` (in the project normalization; no explicit `4\pi` factor).
+`S_parallel` is the projection of `S` onto the local, instantaneous
+ambient magnetic-field direction `B_raw / |B_raw|`.
 
 ## Environment Variables
 
