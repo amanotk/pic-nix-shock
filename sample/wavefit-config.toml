@@ -59,5 +59,4 @@ good_lambda_factor_max = 4.0
 [plot]
 wavefile = "wavefilter"
 fitfile = "wavefit"
-# Output: <plot_prefix>-<step>.png under work/<run>/<dirname>/
-plot_prefix = "wavefit-envelope"
+# Output: <fitfile>-envelope-<index>.png under work/<run>/<dirname>/

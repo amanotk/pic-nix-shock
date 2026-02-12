@@ -360,6 +360,6 @@ def test_wavefit_plot_job_writes_envelope_maps(temp_dir, monkeypatch):
     obj.options["debug"] = False
     obj.main_plot()
 
-    out_png = work_dir / "wavefit-envelope-00000010.png"
+    out_png = work_dir / "wavefit-envelope-0000.png"
     assert out_png.exists()
     assert out_png.stat().st_size > 0

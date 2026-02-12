@@ -138,5 +138,5 @@ fitted snapshot from `fitfile.h5` + `wavefile.h5`.
 
 - Input snapshots come from `fitfile` (`snapshots/<step>`).
 - Overlay points include only candidates with `is_good=1`.
-- Output filename pattern: `<plot_prefix>-<step>.png`.
+- Output filename pattern: `<fitfile>-envelope-<index>.png`.
 - `--debug`, `--debug-count`, and `--debug-index` may be used to render a subset.

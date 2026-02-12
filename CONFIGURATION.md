@@ -211,7 +211,6 @@ good_lambda_factor_max = 4.0
 [plot]
 wavefile = "wavefilter"
 fitfile = "wavefit"
-plot_prefix = "wavefit-envelope"
 ```
 
 Notes:
@@ -222,8 +221,7 @@ Notes:
   - `plot` job reads existing `fitfile` snapshots and renders envelope maps.
   - Debug quicklook controls are CLI-only (`--debug-plot`, `--no-debug-plot`,
     `--debug-plot-count`, `--debug-plot-prefix`).
-  - Envelope-map output prefix for `plot` job is CLI-controlled via `--plot-prefix`
-    (or TOML `plot_prefix`).
+  - Plot outputs are named as `<fitfile>-envelope-<index>.png`.
   - `max_candidates` applies only in debug mode; non-debug candidate count is unbounded.
   - `helicity` scan and multi-start are always enabled in current implementation.
   - Use `good_nrmse_bal_max` and `good_lambda_factor_max` for quality gates.
@@ -257,7 +255,7 @@ python -m shock.wavefit -j analyze --debug --debug-count 4 sample/wavefit-config
 python -m shock.wavefit -j analyze --debug --debug-index 0 --debug-index 16 sample/wavefit-config.toml
 python -m shock.wavefit -j analyze --debug --debug-plot-count 12 --debug-plot-prefix wavefit-quick sample/wavefit-config.toml
 python -m shock.wavefit -j plot sample/wavefit-config.toml
-python -m shock.wavefit -j plot --debug --debug-count 8 --plot-prefix wavefit-env sample/wavefit-config.toml
+python -m shock.wavefit -j plot --debug --debug-count 8 sample/wavefit-config.toml
 ```
 
 ## Environment Variables

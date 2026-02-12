@@ -524,9 +524,9 @@ class WaveFitAnalyzer(base.JobExecutor):
     def main_plot(self):
         wavefile = self.get_filename(self.options.get("wavefile", "wavefilter"), ".h5")
         fitfile = self.get_filename(self.options.get("fitfile", "wavefit"), ".h5")
-        output_prefix = str(self.options.get("plot_prefix", "wavefit-envelope"))
+        fitfile_basename = str(self.options.get("fitfile", "wavefit"))
 
-        outdir = pathlib.Path(self.get_filename(output_prefix, "")).parent
+        outdir = pathlib.Path(self.get_filename(fitfile_basename, "")).parent
         outdir.mkdir(parents=True, exist_ok=True)
 
         with h5py.File(wavefile, "r") as fp_wave, h5py.File(fitfile, "r") as fp_fit:
@@ -596,7 +596,9 @@ class WaveFitAnalyzer(base.JobExecutor):
                     "option_envelope_threshold", self.options.get("envelope_threshold", np.nan)
                 )
 
-                filename = outdir / ("{:s}-{:08d}.png".format(output_prefix, step))
+                filename = outdir / (
+                    "{:s}-envelope-{:04d}.png".format(fitfile_basename, int(snapshot_index))
+                )
                 save_envelope_map_plot(
                     str(filename),
                     envelope,
@@ -681,12 +683,6 @@ def main():
         default="wavefit-debug",
         help="filename prefix for debug quicklook plots",
     )
-    parser.add_argument(
-        "--plot-prefix",
-        type=str,
-        default="wavefit-envelope",
-        help="filename prefix for envelope map outputs in plot job",
-    )
     parser.add_argument("config", nargs=1, help="configuration file")
     args = parser.parse_args()
     config = args.config[0]
@@ -698,7 +694,6 @@ def main():
     debug_plot = args.debug_plot
     debug_plot_count = args.debug_plot_count
     debug_plot_prefix = args.debug_plot_prefix
-    plot_prefix = args.plot_prefix
 
     if debug_plot_count < 0:
         raise ValueError("debug_plot_count must be a non-negative integer")
@@ -712,7 +707,6 @@ def main():
         obj.options["debug_plot"] = debug_plot
         obj.options["debug_plot_count"] = debug_plot_count
         obj.options["debug_plot_prefix"] = debug_plot_prefix
-        obj.options["plot_prefix"] = plot_prefix
 
     jobs = args.job.split(",")
     for job in tqdm.tqdm(jobs):
