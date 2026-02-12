@@ -1,6 +1,7 @@
 """Unit tests for refactored wavefit helper modules."""
 
 from pathlib import Path
+import pickle
 
 import numpy as np
 
@@ -226,6 +227,26 @@ def test_wavefit_patch_coordinates_are_contiguous_across_y_boundary():
     ydiff = np.diff(yyp)
     assert np.all(ydiff > 0.0)
     assert float(np.max(ydiff)) <= 1.5 * dy
+
+
+def test_wavefit_extract_parameter_from_embedded_wave_config(temp_dir):
+    import h5py
+
+    from shock.wavefit.cli import extract_parameter_from_wavefile
+
+    h5_path = Path(temp_dir) / "wavefile-with-config.h5"
+    config_obj = {"parameter": {"sigma": 0.0125, "u0": 0.25}}
+    encoded = np.frombuffer(pickle.dumps(config_obj), dtype=np.int8)
+
+    with h5py.File(h5_path, "w") as fp:
+        fp.create_dataset("config", data=encoded, dtype=np.int8)
+
+    with h5py.File(h5_path, "r") as fp:
+        param = extract_parameter_from_wavefile(fp)
+
+    assert isinstance(param, dict)
+    assert np.isclose(float(param["sigma"]), 0.0125)
+    assert np.isclose(float(param["u0"]), 0.25)
 
 
 def test_wavefit_cli_select_debug_indices_modes():

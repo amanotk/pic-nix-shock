@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 import pathlib
+import pickle
 import sys
 
 import h5py
@@ -63,6 +64,31 @@ LARGE_ARRAY_KEYS = [
     "patch_x",
     "patch_y",
 ]
+
+
+def decode_embedded_config(config_dataset_value):
+    data = np.asarray(config_dataset_value)
+    payload = data.astype(np.uint8).tobytes()
+    return pickle.loads(payload)
+
+
+def extract_parameter_from_wavefile(fileobj):
+    if "config" not in fileobj:
+        return None
+    try:
+        config_obj = decode_embedded_config(fileobj["config"][()])
+    except Exception:
+        return None
+
+    if isinstance(config_obj, dict):
+        if isinstance(config_obj.get("parameter", None), dict):
+            return config_obj["parameter"]
+        configuration = config_obj.get("configuration", None)
+        if isinstance(configuration, dict) and isinstance(
+            configuration.get("parameter", None), dict
+        ):
+            return configuration["parameter"]
+    return None
 
 
 def select_debug_indices(size, debug=False, debug_count=8, debug_mode="uniform"):
@@ -154,20 +180,21 @@ class WaveFitAnalyzer(base.JobExecutor):
     def read_parameter(self):
         return super().read_parameter()
 
-    def get_reference_b0(self):
-        if not isinstance(self.parameter, dict):
-            raise ValueError("profile parameter is required for B0 normalization")
-        if "sigma" not in self.parameter or "u0" not in self.parameter:
-            raise ValueError("profile parameter must contain sigma and u0 for B0 normalization")
+    def get_reference_b0(self, parameter=None):
+        source = parameter if isinstance(parameter, dict) else self.parameter
+        if not isinstance(source, dict):
+            raise ValueError("parameter is required for B0 normalization")
+        if "sigma" not in source or "u0" not in source:
+            raise ValueError("parameter must contain sigma and u0 for B0 normalization")
 
-        sigma = float(self.parameter["sigma"])
-        u0 = float(self.parameter["u0"])
+        sigma = float(source["sigma"])
+        u0 = float(source["u0"])
         b0 = np.sqrt(sigma) / np.sqrt(1.0 + u0**2)
         if b0 <= 0.0 or not np.isfinite(b0):
             raise ValueError("computed B0 is invalid")
         return float(b0)
 
-    def fit_single_snapshot(self, E, B, xx, yy):
+    def fit_single_snapshot(self, E, B, xx, yy, b0):
         fit_options = dict(self.options)
         if bool(self.options.get("debug", False)):
             fit_options.setdefault("max_candidates", 32)
@@ -175,7 +202,6 @@ class WaveFitAnalyzer(base.JobExecutor):
             fit_options.pop("max_candidates", None)
 
         sigma = float(self.options.get("sigma", 3.0))
-        b0 = self.get_reference_b0()
         envelope = np.linalg.norm(B, axis=-1) / b0
         cand_ix, cand_iy, env_used = pick_candidate_points(xx, yy, envelope, sigma, fit_options)
 
@@ -310,6 +336,11 @@ class WaveFitAnalyzer(base.JobExecutor):
             return
 
         with h5py.File(wavefile, "r") as fp_wave, h5py.File(fitfile, "w") as fp_fit:
+            parameter = extract_parameter_from_wavefile(fp_wave)
+            if parameter is None:
+                parameter = self.parameter
+            b0 = self.get_reference_b0(parameter)
+
             nstep = int(fp_wave["step"].shape[0])
             if debug and len(debug_indices) > 0:
                 indices = []
@@ -346,7 +377,7 @@ class WaveFitAnalyzer(base.JobExecutor):
                 E = fp_wave["E"][snapshot_index, ...]
                 B = fp_wave["B"][snapshot_index, ...]
 
-                result = self.fit_single_snapshot(E, B, x, y)
+                result = self.fit_single_snapshot(E, B, x, y, b0)
                 if debug:
                     self.generate_diagnostics(result, x, y, step)
                 self.cleanup_large_arrays(result)

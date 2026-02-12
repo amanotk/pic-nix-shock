@@ -223,7 +223,8 @@ Notes:
 - `sigma` is the Gaussian-window width in physical `x`/`y` units.
 - Fit patch radius is fixed at `3 * sigma`.
 - Candidate detection threshold uses `|B_wave| / B0 >= envelope_threshold`
-  where `B0 = sqrt(sigma) / sqrt(1 + u0^2)` from run profile parameters.
+  where `B0 = sqrt(sigma) / sqrt(1 + u0^2)` from embedded wavefile config
+  parameters (`sigma`, `u0`) when available, otherwise from run profile.
 - Candidate de-dup uses absolute spacing in x/y units: `candidate_distance`.
 - `y` is treated as periodic in both candidate spacing and fitting window.
 - Data and model are both multiplied by the same Gaussian window before
