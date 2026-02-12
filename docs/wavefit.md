@@ -125,3 +125,8 @@ wavefit.save_quickcheck_plot_12panel(
     rms_normalize=True,
 )
 ```
+
+## Interactive Tuning
+
+For iterative, human-in-the-loop fitting-quality sessions, use the generic
+playbook in `docs/wavefit-interactive-tuning.md`.
