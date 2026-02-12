@@ -5,7 +5,6 @@ import os
 import pathlib
 import pickle
 import sys
-from typing import Union
 
 import h5py
 import numpy as np
@@ -29,7 +28,6 @@ except ImportError:
 from .fit import fit_one_candidate
 from .model import periodic_delta
 from .plot import save_envelope_map_plot, save_quickcheck_plot_12panel
-
 
 RESULT_FLOAT_KEYS = [
     "x0",
@@ -510,8 +508,11 @@ class WaveFitAnalyzer(base.JobExecutor):
         outdir.mkdir(parents=True, exist_ok=True)
 
         good_points = [item for item in fit_results if bool(item.get("is_good", False))]
+        bad_points = [item for item in fit_results if not bool(item.get("is_good", False))]
         good_x = [float(xx[int(item["ix"])]) for item in good_points if "ix" in item]
         good_y = [float(yy[int(item["iy"])]) for item in good_points if "iy" in item]
+        bad_x = [float(xx[int(item["ix"])]) for item in bad_points if "ix" in item]
+        bad_y = [float(yy[int(item["iy"])]) for item in bad_points if "iy" in item]
         envelope_map_file = outdir / ("{:s}-envelope-{:08d}.png".format(output_prefix, int(step)))
         save_envelope_map_plot(
             str(envelope_map_file),
@@ -520,6 +521,8 @@ class WaveFitAnalyzer(base.JobExecutor):
             yy,
             good_x,
             good_y,
+            bad_x,
+            bad_y,
             step,
             time=time,
             wci=wci,
@@ -815,29 +818,16 @@ class WaveFitAnalyzer(base.JobExecutor):
             step_to_wave_index = {int(step): i for i, step in enumerate(wave_steps)}
             fit_step_set = set(fit_steps)
 
-            snapshot_indices_opt = self.options.get("snapshot_indices", [])
-            if len(snapshot_indices_opt) > 0:
-                requested_indices = np.array(
-                    sorted(set(int(i) for i in snapshot_indices_opt)), dtype=np.int64
+            snapshot_indices = self.select_snapshot_indices(int(wave_steps.shape[0]))
+            selected_steps = [
+                int(wave_steps[int(i)])
+                for i in snapshot_indices
+                if int(wave_steps[int(i)]) in fit_step_set
+            ]
+            if len(selected_steps) == 0:
+                raise ValueError(
+                    "None of requested/debug-selected snapshot indices are available in fitfile"
                 )
-                if np.any(requested_indices < 0) or np.any(
-                    requested_indices >= wave_steps.shape[0]
-                ):
-                    raise ValueError(
-                        "snapshot index out of range for wavefile (nstep={}): {}".format(
-                            int(wave_steps.shape[0]), requested_indices.tolist()
-                        )
-                    )
-                selected_steps = [
-                    int(wave_steps[i])
-                    for i in requested_indices
-                    if int(wave_steps[i]) in fit_step_set
-                ]
-                if len(selected_steps) == 0:
-                    raise ValueError("None of requested snapshot indices are available in fitfile")
-            else:
-                snapshot_indices = self.select_snapshot_indices(len(fit_steps))
-                selected_steps = [int(fit_steps[int(i)]) for i in snapshot_indices]
 
             for step in tqdm.tqdm(selected_steps, desc="plot", disable=not is_root_rank()):
                 grp_name = "snapshots/{:08d}".format(step)
@@ -865,16 +855,15 @@ class WaveFitAnalyzer(base.JobExecutor):
                 else:
                     good_mask = np.ones((cand_ix.size,), dtype=bool)
 
-                valid = (
-                    good_mask
-                    & (cand_ix >= 0)
-                    & (cand_ix < x.size)
-                    & (cand_iy >= 0)
-                    & (cand_iy < y.size)
-                )
+                valid = (cand_ix >= 0) & (cand_ix < x.size) & (cand_iy >= 0) & (cand_iy < y.size)
 
-                good_x = x[cand_ix[valid]].tolist()
-                good_y = y[cand_iy[valid]].tolist()
+                good_valid = valid & good_mask
+                bad_valid = valid & (~good_mask)
+
+                good_x = x[cand_ix[good_valid]].tolist()
+                good_y = y[cand_iy[good_valid]].tolist()
+                bad_x = x[cand_ix[bad_valid]].tolist()
+                bad_y = y[cand_iy[bad_valid]].tolist()
                 threshold = grp.attrs.get(
                     "option_envelope_threshold", self.options.get("envelope_threshold", np.nan)
                 )
@@ -889,6 +878,8 @@ class WaveFitAnalyzer(base.JobExecutor):
                     y,
                     good_x,
                     good_y,
+                    bad_x,
+                    bad_y,
                     step,
                     time=time,
                     wci=wci,

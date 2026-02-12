@@ -20,7 +20,6 @@ from .model import (
     wrap_to_pi,
 )
 
-
 PATCH_RADIUS_SIGMA = 3.0
 
 
@@ -89,10 +88,7 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options, B_background=None, J
     Ep = E[np.ix_(y_idx, x_idx, np.arange(3))]
     Bp = B[np.ix_(y_idx, x_idx, np.arange(3))]
     Xp, Yp = build_xy(xxp, yyp)
-
-    fullX, fullY = build_xy(xx, yy)
-    Wfull = build_window(fullX, fullY, x0, y0, sigma, Ly)
-    Wpatch = Wfull[np.ix_(y_idx, x_idx)]
+    Wpatch = build_window(Xp, Yp, x0, y0, sigma, Ly)
 
     Ew_data = Ep * Wpatch[..., np.newaxis]
     Bw_data = Bp * Wpatch[..., np.newaxis]

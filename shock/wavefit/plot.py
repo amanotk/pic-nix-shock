@@ -17,6 +17,8 @@ def save_envelope_map_plot(
     yy,
     good_x,
     good_y,
+    bad_x,
+    bad_y,
     step,
     time=None,
     wci=None,
@@ -27,6 +29,8 @@ def save_envelope_map_plot(
     env = np.asarray(envelope)
     gx = np.asarray(good_x)
     gy = np.asarray(good_y)
+    bx = np.asarray(bad_x)
+    by = np.asarray(bad_y)
 
     xspan = float(xx.max() - xx.min())
     yspan = float(yy.max() - yy.min())
@@ -48,6 +52,19 @@ def save_envelope_map_plot(
         ax.scatter(
             gx,
             gy,
+            s=30,
+            c="red",
+            marker="o",
+            linewidths=0.8,
+            edgecolors="red",
+            facecolors="none",
+            alpha=0.55,
+        )
+
+    if bx.size > 0:
+        ax.scatter(
+            bx,
+            by,
             s=30,
             c="red",
             marker="x",

@@ -1,8 +1,8 @@
 """Tests for wavefilter analyze output."""
 
+import pickle
 import sys
 import types
-import pickle
 
 import h5py
 import numpy as np

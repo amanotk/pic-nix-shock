@@ -1,7 +1,6 @@
 """Regression tests for wavefit using compact real-data fixtures."""
 
 import json
-from pathlib import Path
 
 import numpy as np
 

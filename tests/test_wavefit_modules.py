@@ -1,7 +1,7 @@
 """Unit tests for refactored wavefit helper modules."""
 
-from pathlib import Path
 import pickle
+from pathlib import Path
 
 import numpy as np
 
