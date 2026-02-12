@@ -21,9 +21,11 @@ from .model import (
 )
 
 
+PATCH_RADIUS_SIGMA = 3.0
+
+
 def build_patch_masks(xx, yy, x0, y0, sigma, options):
-    patch_radius_sigma = float(options.get("patch_radius_sigma", 3.0))
-    radius = patch_radius_sigma * sigma
+    radius = PATCH_RADIUS_SIGMA * sigma
     dx = xx - x0
     Ly = (yy[-1] - yy[0]) + np.median(np.diff(yy))
     dy = periodic_delta(yy, y0, Ly)
@@ -32,11 +34,26 @@ def build_patch_masks(xx, yy, x0, y0, sigma, options):
     return xmask, ymask, Ly
 
 
-def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
+def build_patch_coordinates(xx, yy, x0, y0, sigma, options):
     xmask, ymask, Ly = build_patch_masks(xx, yy, x0, y0, sigma, options)
+    x_idx = np.where(xmask)[0]
+    y_idx = np.where(ymask)[0]
+
+    y_rel = periodic_delta(yy[y_idx], y0, Ly)
+    y_order = np.argsort(y_rel)
+    y_idx = y_idx[y_order]
+    y_rel = y_rel[y_order]
+
+    xxp = xx[x_idx]
+    yyp = y0 + y_rel
+    return x_idx, y_idx, xxp, yyp, Ly
+
+
+def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
+    x_idx, y_idx, xxp, yyp, Ly = build_patch_coordinates(xx, yy, x0, y0, sigma, options)
     min_points = int(options.get("fit_min_points", 64))
 
-    if xmask.sum() * ymask.sum() < min_points:
+    if x_idx.size * y_idx.size < min_points:
         return {
             "success": False,
             "reason": "insufficient_points",
@@ -45,15 +62,13 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
             "y0": y0,
         }
 
-    xxp = xx[xmask]
-    yyp = yy[ymask]
-    Ep = E[np.ix_(ymask, xmask, np.arange(3))]
-    Bp = B[np.ix_(ymask, xmask, np.arange(3))]
+    Ep = E[np.ix_(y_idx, x_idx, np.arange(3))]
+    Bp = B[np.ix_(y_idx, x_idx, np.arange(3))]
     Xp, Yp = build_xy(xxp, yyp)
 
     fullX, fullY = build_xy(xx, yy)
     Wfull = build_window(fullX, fullY, x0, y0, sigma, Ly)
-    Wpatch = Wfull[np.ix_(ymask, xmask)]
+    Wpatch = Wfull[np.ix_(y_idx, x_idx)]
 
     Ew_data = Ep * Wpatch[..., np.newaxis]
     Bw_data = Bp * Wpatch[..., np.newaxis]

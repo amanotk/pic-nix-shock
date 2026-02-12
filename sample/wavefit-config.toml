@@ -22,15 +22,14 @@ sigma = 4.0
 # Candidate selection from |B| envelope normalized by B0
 # envelope_threshold is an absolute threshold on |B_wave| / B0
 # B0 is computed from profile parameters (sigma, u0)
-# candidate_min_distance_sigma is a factor times sigma
+# candidate_distance is the minimum candidate spacing in x/y units
 # max_candidates is used only when running with --debug
 max_candidates = 32
 envelope_smooth_sigma = 0.5
 envelope_threshold = 0.10
-candidate_min_distance_sigma = 1.0
+candidate_distance = 4.0
 
-# Fit region around each candidate
-patch_radius_sigma = 3.0
+# Fit region around each candidate is fixed to 3*sigma
 fit_min_points = 64
 
 # Circular-wave fit bounds/initial values

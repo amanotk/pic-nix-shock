@@ -94,7 +94,7 @@ def pick_candidate_points(xx, yy, envelope, sigma, options):
         if max_candidates <= 0:
             max_candidates = None
     threshold = float(options.get("envelope_threshold", 0.10))
-    min_distance_sigma = float(options.get("candidate_min_distance_sigma", 1.0))
+    candidate_distance = float(options.get("candidate_distance", sigma))
 
     env = np.array(envelope, copy=True)
     if smooth_sigma > 0.0:
@@ -117,7 +117,7 @@ def pick_candidate_points(xx, yy, envelope, sigma, options):
     order = np.argsort(amp)[::-1]
 
     Ly = (yy[-1] - yy[0]) + ydy
-    min_distance = min_distance_sigma * sigma
+    min_distance = candidate_distance
     selected_ix = []
     selected_iy = []
 

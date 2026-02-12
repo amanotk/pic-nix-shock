@@ -44,7 +44,7 @@ def test_wavefit_candidates_pick_points_respects_spacing():
     options = {
         "max_candidates": 8,
         "envelope_threshold": 0.1,
-        "candidate_min_distance_sigma": 1.5,
+        "candidate_distance": 1.5,
         "envelope_smooth_sigma": 0.0,
     }
     cand_ix, cand_iy, _ = pick_candidate_points(xx, yy, env, sigma=1.0, options=options)
@@ -66,7 +66,7 @@ def test_wavefit_candidates_no_limit_when_max_candidates_not_set():
 
     options = {
         "envelope_threshold": 0.1,
-        "candidate_min_distance_sigma": 1.0,
+        "candidate_distance": 1.0,
         "envelope_smooth_sigma": 0.0,
     }
     cand_ix, cand_iy, _ = pick_candidate_points(xx, yy, env, sigma=1.0, options=options)
@@ -186,7 +186,6 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
     B = B + 0.02 * rng.normal(size=B.shape)
 
     options = {
-        "patch_radius_sigma": 3.0,
         "fit_min_points": 64,
         "kx_init": 0.5,
         "kx_min": 0.0,
@@ -207,6 +206,26 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
     for key in ["kx_err", "ky_err", "Ew_err", "Bw_err", "phiE_err", "phiB_err"]:
         assert key in result
     assert "has_errorbars" in result
+
+
+def test_wavefit_patch_coordinates_are_contiguous_across_y_boundary():
+    from shock.wavefit.fit import build_patch_coordinates
+
+    xx = np.linspace(0.0, 50.0, 101)
+    yy = np.linspace(0.0, 100.8, 85)
+    y0 = float(yy[-2])
+    sigma = 4.0
+    options = {}
+
+    _, y_idx, _, yyp, _ = build_patch_coordinates(
+        xx, yy, x0=25.0, y0=y0, sigma=sigma, options=options
+    )
+
+    assert y_idx.size > 0
+    dy = float(np.median(np.diff(yy)))
+    ydiff = np.diff(yyp)
+    assert np.all(ydiff > 0.0)
+    assert float(np.max(ydiff)) <= 1.5 * dy
 
 
 def test_wavefit_cli_select_debug_indices_modes():
