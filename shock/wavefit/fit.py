@@ -49,7 +49,31 @@ def build_patch_coordinates(xx, yy, x0, y0, sigma, options):
     return x_idx, y_idx, xxp, yyp, Ly
 
 
-def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
+def weighted_local_mean_vector(field_patch, weight_patch):
+    if field_patch is None:
+        return np.nan, np.nan, np.nan
+
+    wsum = float(np.sum(weight_patch))
+    if wsum <= 0.0 or not np.isfinite(wsum):
+        return np.nan, np.nan, np.nan
+
+    vec = np.sum(field_patch * weight_patch[..., np.newaxis], axis=(0, 1)) / wsum
+    if vec.shape[-1] < 3:
+        return np.nan, np.nan, np.nan
+    return float(vec[0]), float(vec[1]), float(vec[2])
+
+
+def weighted_local_mean_velocity(current_patch, weight_patch):
+    if current_patch is None or current_patch.shape[-1] < 4:
+        return np.nan, np.nan, np.nan
+
+    density = current_patch[..., 0]
+    current = current_patch[..., 1:4]
+    velocity = current / (density[..., np.newaxis] + 1.0e-32)
+    return weighted_local_mean_vector(velocity, weight_patch)
+
+
+def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options, B_background=None, J_background=None):
     x_idx, y_idx, xxp, yyp, Ly = build_patch_coordinates(xx, yy, x0, y0, sigma, options)
     min_points = int(options.get("fit_min_points", 64))
 
@@ -72,6 +96,22 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
 
     Ew_data = Ep * Wpatch[..., np.newaxis]
     Bw_data = Bp * Wpatch[..., np.newaxis]
+
+    Braw_patch = None
+    if isinstance(B_background, np.ndarray) and B_background.shape[:2] == B.shape[:2]:
+        if B_background.shape[-1] >= 3:
+            Braw_patch = B_background[np.ix_(y_idx, x_idx, np.arange(3))]
+
+    Je_patch = None
+    Ji_patch = None
+    if isinstance(J_background, np.ndarray) and J_background.shape[:2] == B.shape[:2]:
+        if J_background.shape[-1] >= 8:
+            Je_patch = J_background[np.ix_(y_idx, x_idx, np.arange(4))]
+            Ji_patch = J_background[np.ix_(y_idx, x_idx, np.arange(4, 8))]
+
+    Bx, By, Bz = weighted_local_mean_vector(Braw_patch, Wpatch)
+    vex, vey, vez = weighted_local_mean_velocity(Je_patch, Wpatch)
+    vix, viy, viz = weighted_local_mean_velocity(Ji_patch, Wpatch)
 
     rms_e = rms_floor(Ew_data)
     rms_b = rms_floor(Bw_data)
@@ -262,6 +302,15 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
         "patch_xmax": float(xxp.max()),
         "patch_ymin": float(yyp.min()),
         "patch_ymax": float(yyp.max()),
+        "Bx": float(Bx),
+        "By": float(By),
+        "Bz": float(Bz),
+        "vex": float(vex),
+        "vey": float(vey),
+        "vez": float(vez),
+        "vix": float(vix),
+        "viy": float(viy),
+        "viz": float(viz),
         "windowed_data_E": Ew_data,
         "windowed_data_B": Bw_data,
         "windowed_model_E": Em,

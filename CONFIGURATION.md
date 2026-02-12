@@ -190,6 +190,7 @@ overwrite = true
 
 [analyze]
 wavefile = "wavefilter"
+rawfile = "wavetool"
 fitfile = "wavefit"
 sigma = 4.0
 max_candidates = 32
@@ -206,9 +207,6 @@ kx_init_scan = [0.1, 0.3, 0.6]
 ky_init_scan = [-0.8, -0.4, 0.0, 0.4, 0.8]
 good_nrmse_bal_max = 0.40
 good_lambda_factor_max = 4.0
-debug_plot = true
-debug_plot_count = 8
-debug_plot_prefix = "wavefit-debug"
 ```
 
 Notes:
@@ -216,6 +214,8 @@ Notes:
 - AI quick reference (operational semantics):
   - Non-debug run analyzes all snapshots in the input `wavefile`.
   - `--debug` enables subset mode (`--debug-count`, `--debug-mode`, `--debug-index`).
+  - Debug quicklook controls are CLI-only (`--debug-plot`, `--no-debug-plot`,
+    `--debug-plot-count`, `--debug-plot-prefix`).
   - `max_candidates` applies only in debug mode; non-debug candidate count is unbounded.
   - `helicity` scan and multi-start are always enabled in current implementation.
   - Use `good_nrmse_bal_max` and `good_lambda_factor_max` for quality gates.
@@ -225,6 +225,8 @@ Notes:
 - Candidate detection threshold uses `|B_wave| / B0 >= envelope_threshold`
   where `B0 = sqrt(sigma) / sqrt(1 + u0^2)` from embedded wavefile config
   parameters (`sigma`, `u0`) when available, otherwise from run profile.
+- Local background context fields (`Bx/y/z`, `vex/y/z`, `vix/y/z`) are
+  computed from `rawfile` using the same Gaussian patch weighting.
 - Candidate de-dup uses absolute spacing in x/y units: `candidate_distance`.
 - `y` is treated as periodic in both candidate spacing and fitting window.
 - Data and model are both multiplied by the same Gaussian window before
@@ -237,7 +239,7 @@ Notes:
   per candidate fit and quality metrics (`nrmse`, `r2E`, `r2B`, `redchi`, etc.)
   plus covariance-based 1-sigma parameter errors (`kx_err`, `ky_err`,
   `Ew_err`, `Bw_err`, `phiE_err`, `phiB_err`) when available.
-- Optional diagnostic plots are saved with prefix `debug_plot_prefix`.
+- Optional diagnostic plots are controlled by CLI flags.
 
 Example debug commands:
 
@@ -245,6 +247,7 @@ Example debug commands:
 python -m shock.wavefit -j analyze --debug sample/wavefit-config.toml
 python -m shock.wavefit -j analyze --debug --debug-count 4 sample/wavefit-config.toml
 python -m shock.wavefit -j analyze --debug --debug-index 0 --debug-index 16 sample/wavefit-config.toml
+python -m shock.wavefit -j analyze --debug --debug-plot-count 12 --debug-plot-prefix wavefit-quick sample/wavefit-config.toml
 ```
 
 ## Environment Variables

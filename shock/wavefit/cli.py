@@ -52,6 +52,15 @@ RESULT_FLOAT_KEYS = [
     "patch_xmax",
     "patch_ymin",
     "patch_ymax",
+    "Bx",
+    "By",
+    "Bz",
+    "vex",
+    "vey",
+    "vez",
+    "vix",
+    "viy",
+    "viz",
 ]
 RESULT_INT_KEYS = ["ix", "iy", "nfev"]
 RESULT_BOOL_KEYS = ["success", "is_good", "is_good_nrmse", "is_good_scale", "has_errorbars"]
@@ -178,7 +187,10 @@ class WaveFitAnalyzer(base.JobExecutor):
                 self.options[key] = self.options["analyze"][key]
 
     def read_parameter(self):
-        return super().read_parameter()
+        try:
+            return super().read_parameter()
+        except (FileNotFoundError, KeyError):
+            return None
 
     def get_reference_b0(self, parameter=None):
         source = parameter if isinstance(parameter, dict) else self.parameter
@@ -194,7 +206,7 @@ class WaveFitAnalyzer(base.JobExecutor):
             raise ValueError("computed B0 is invalid")
         return float(b0)
 
-    def fit_single_snapshot(self, E, B, xx, yy, b0):
+    def fit_single_snapshot(self, E, B, xx, yy, b0, B_background=None, J_background=None):
         fit_options = dict(self.options)
         if bool(self.options.get("debug", False)):
             fit_options.setdefault("max_candidates", 32)
@@ -209,7 +221,18 @@ class WaveFitAnalyzer(base.JobExecutor):
         for ix, iy in zip(cand_ix, cand_iy):
             x0 = float(xx[ix])
             y0 = float(yy[iy])
-            fit_result = fit_one_candidate(E, B, xx, yy, x0, y0, sigma, fit_options)
+            fit_result = fit_one_candidate(
+                E,
+                B,
+                xx,
+                yy,
+                x0,
+                y0,
+                sigma,
+                fit_options,
+                B_background=B_background,
+                J_background=J_background,
+            )
             fit_result["ix"] = int(ix)
             fit_result["iy"] = int(iy)
             fit_results.append(fit_result)
@@ -275,6 +298,8 @@ class WaveFitAnalyzer(base.JobExecutor):
             return
 
         debug_plot_count = int(self.options.get("debug_plot_count", 8))
+        if debug_plot_count < 0:
+            raise ValueError("debug_plot_count must be a non-negative integer")
         output_prefix = str(self.options.get("debug_plot_prefix", "wavefit-debug"))
         outdir = pathlib.Path(self.get_filename(output_prefix, "")).parent
         outdir.mkdir(parents=True, exist_ok=True)
@@ -335,53 +360,89 @@ class WaveFitAnalyzer(base.JobExecutor):
             print("Output file {} already exists. Set overwrite=true to replace.".format(fitfile))
             return
 
-        with h5py.File(wavefile, "r") as fp_wave, h5py.File(fitfile, "w") as fp_fit:
-            parameter = extract_parameter_from_wavefile(fp_wave)
-            if parameter is None:
-                parameter = self.parameter
-            b0 = self.get_reference_b0(parameter)
+        fp_raw = None
+        try:
+            with h5py.File(wavefile, "r") as fp_wave, h5py.File(fitfile, "w") as fp_fit:
+                parameter = extract_parameter_from_wavefile(fp_wave)
+                if parameter is None:
+                    parameter = self.parameter
+                b0 = self.get_reference_b0(parameter)
 
-            nstep = int(fp_wave["step"].shape[0])
-            if debug and len(debug_indices) > 0:
-                indices = []
-                for index in debug_indices:
-                    snapshot_index = int(index)
-                    if snapshot_index < 0 or snapshot_index >= nstep:
-                        raise ValueError(
-                            "debug snapshot index out of range: {} (nstep={})".format(
-                                snapshot_index, nstep
+                rawfile_opt = self.options.get("rawfile", "wavetool")
+                rawfile = self.get_filename(rawfile_opt, ".h5") if rawfile_opt else None
+                step_to_raw_index = {}
+                if rawfile is not None and os.path.exists(rawfile):
+                    fp_raw = h5py.File(rawfile, "r")
+                    if "step" in fp_raw:
+                        raw_steps = fp_raw["step"][...]
+                        step_to_raw_index = {int(s): i for i, s in enumerate(raw_steps)}
+
+                nstep = int(fp_wave["step"].shape[0])
+                if debug and len(debug_indices) > 0:
+                    indices = []
+                    for index in debug_indices:
+                        snapshot_index = int(index)
+                        if snapshot_index < 0 or snapshot_index >= nstep:
+                            raise ValueError(
+                                "debug snapshot index out of range: {} (nstep={})".format(
+                                    snapshot_index, nstep
+                                )
                             )
-                        )
-                    indices.append(snapshot_index)
-                snapshot_indices = np.array(sorted(set(indices)), dtype=np.int64)
-            else:
-                snapshot_indices = select_debug_indices(nstep, debug, debug_count, debug_mode)
+                        indices.append(snapshot_index)
+                    snapshot_indices = np.array(sorted(set(indices)), dtype=np.int64)
+                else:
+                    snapshot_indices = select_debug_indices(nstep, debug, debug_count, debug_mode)
 
-            if snapshot_indices.size == 0:
-                raise ValueError("No snapshots selected. Adjust debug settings.")
+                if snapshot_indices.size == 0:
+                    raise ValueError("No snapshots selected. Adjust debug settings.")
 
-            for snapshot_index in tqdm.tqdm(snapshot_indices):
-                step = int(fp_wave["step"][snapshot_index])
-                time = float(fp_wave["t"][snapshot_index])
+                for snapshot_index in tqdm.tqdm(snapshot_indices):
+                    step = int(fp_wave["step"][snapshot_index])
+                    time = float(fp_wave["t"][snapshot_index])
 
-                x = (
-                    fp_wave["x"][snapshot_index, ...]
-                    if fp_wave["x"].ndim == 2
-                    else fp_wave["x"][()]
-                )
-                y = (
-                    fp_wave["y"][snapshot_index, ...]
-                    if fp_wave["y"].ndim == 2
-                    else fp_wave["y"][()]
-                )
-                E = fp_wave["E"][snapshot_index, ...]
-                B = fp_wave["B"][snapshot_index, ...]
+                    x = (
+                        fp_wave["x"][snapshot_index, ...]
+                        if fp_wave["x"].ndim == 2
+                        else fp_wave["x"][()]
+                    )
+                    y = (
+                        fp_wave["y"][snapshot_index, ...]
+                        if fp_wave["y"].ndim == 2
+                        else fp_wave["y"][()]
+                    )
+                    E = fp_wave["E"][snapshot_index, ...]
+                    B = fp_wave["B"][snapshot_index, ...]
 
-                result = self.fit_single_snapshot(E, B, x, y, b0)
-                if debug:
-                    self.generate_diagnostics(result, x, y, step)
-                self.cleanup_large_arrays(result)
-                self.write_snapshot_result(fp_fit, step, time, result)
+                    B_background = None
+                    J_background = None
+                    if fp_raw is not None:
+                        raw_index = step_to_raw_index.get(step, None)
+                        if raw_index is not None:
+                            if "B" in fp_raw:
+                                B_background = fp_raw["B"][raw_index, ...]
+                            if "J" in fp_raw:
+                                J_background = fp_raw["J"][raw_index, ...]
+                            elif "Je" in fp_raw and "Ji" in fp_raw:
+                                Je = fp_raw["Je"][raw_index, ...]
+                                Ji = fp_raw["Ji"][raw_index, ...]
+                                J_background = np.concatenate([Je, Ji], axis=-1)
+
+                    result = self.fit_single_snapshot(
+                        E,
+                        B,
+                        x,
+                        y,
+                        b0,
+                        B_background=B_background,
+                        J_background=J_background,
+                    )
+                    if debug:
+                        self.generate_diagnostics(result, x, y, step)
+                    self.cleanup_large_arrays(result)
+                    self.write_snapshot_result(fp_fit, step, time, result)
+        finally:
+            if fp_raw is not None:
+                fp_raw.close()
 
 
 def main():
@@ -421,6 +482,31 @@ def main():
         default=[],
         help="explicit snapshot index to process in debug mode (repeatable)",
     )
+    parser.add_argument(
+        "--debug-plot",
+        dest="debug_plot",
+        action="store_true",
+        default=True,
+        help="save quicklook plots in debug mode (default: enabled)",
+    )
+    parser.add_argument(
+        "--no-debug-plot",
+        dest="debug_plot",
+        action="store_false",
+        help="disable quicklook plot generation in debug mode",
+    )
+    parser.add_argument(
+        "--debug-plot-count",
+        type=int,
+        default=8,
+        help="number of quicklook candidates to plot in debug mode",
+    )
+    parser.add_argument(
+        "--debug-plot-prefix",
+        type=str,
+        default="wavefit-debug",
+        help="filename prefix for debug quicklook plots",
+    )
     parser.add_argument("config", nargs=1, help="configuration file")
     args = parser.parse_args()
     config = args.config[0]
@@ -428,12 +514,21 @@ def main():
     debug_count = args.debug_count
     debug_mode = args.debug_mode
     debug_indices = args.debug_indices
+    debug_plot = args.debug_plot
+    debug_plot_count = args.debug_plot_count
+    debug_plot_prefix = args.debug_plot_prefix
+
+    if debug_plot_count < 0:
+        raise ValueError("debug_plot_count must be a non-negative integer")
 
     def apply_runtime_options(obj):
         obj.options["debug"] = debug
         obj.options["debug_count"] = debug_count
         obj.options["debug_mode"] = debug_mode
         obj.options["debug_indices"] = debug_indices
+        obj.options["debug_plot"] = debug_plot
+        obj.options["debug_plot_count"] = debug_plot_count
+        obj.options["debug_plot_prefix"] = debug_plot_prefix
 
     jobs = args.job.split(",")
     for job in tqdm.tqdm(jobs):

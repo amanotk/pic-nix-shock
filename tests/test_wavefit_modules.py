@@ -186,6 +186,21 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
     E = E + 0.02 * rng.normal(size=E.shape)
     B = B + 0.02 * rng.normal(size=B.shape)
 
+    B_background = np.zeros_like(B)
+    B_background[..., 0] = 2.0
+    B_background[..., 1] = -1.0
+    B_background[..., 2] = 0.5
+
+    ve_true = np.array([0.2, -0.1, 0.05])
+    vi_true = np.array([-0.3, 0.15, 0.02])
+    Je0 = -2.0
+    Ji0 = +3.0
+    J_background = np.zeros(B.shape[:-1] + (8,), dtype=np.float64)
+    J_background[..., 0] = Je0
+    J_background[..., 1:4] = Je0 * ve_true[np.newaxis, np.newaxis, :]
+    J_background[..., 4] = Ji0
+    J_background[..., 5:8] = Ji0 * vi_true[np.newaxis, np.newaxis, :]
+
     options = {
         "fit_min_points": 64,
         "kx_init": 0.5,
@@ -199,7 +214,18 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
         "good_lambda_factor_max": 4.0,
     }
 
-    result = fit_one_candidate(E, B, xx, yy, true["x0"], true["y0"], true["sigma"], options)
+    result = fit_one_candidate(
+        E,
+        B,
+        xx,
+        yy,
+        true["x0"],
+        true["y0"],
+        true["sigma"],
+        options,
+        B_background=B_background,
+        J_background=J_background,
+    )
     assert result["success"]
     assert result["nrmse_balanced"] < 0.4
     assert result["is_good_nrmse"]
@@ -207,6 +233,17 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
     for key in ["kx_err", "ky_err", "Ew_err", "Bw_err", "phiE_err", "phiB_err"]:
         assert key in result
     assert "has_errorbars" in result
+    for key in ["Bx", "By", "Bz", "vex", "vey", "vez", "vix", "viy", "viz"]:
+        assert key in result
+    assert np.isclose(result["Bx"], 2.0)
+    assert np.isclose(result["By"], -1.0)
+    assert np.isclose(result["Bz"], 0.5)
+    assert np.isclose(result["vex"], ve_true[0])
+    assert np.isclose(result["vey"], ve_true[1])
+    assert np.isclose(result["vez"], ve_true[2])
+    assert np.isclose(result["vix"], vi_true[0])
+    assert np.isclose(result["viy"], vi_true[1])
+    assert np.isclose(result["viz"], vi_true[2])
 
 
 def test_wavefit_patch_coordinates_are_contiguous_across_y_boundary():

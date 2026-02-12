@@ -6,6 +6,8 @@ overwrite = true
 # Wavefit runtime mode is controlled by CLI flags, not TOML:
 # - normal run: analyzes all snapshots in wavefile
 # - --debug: analyzes only a subset (via --debug-count/--debug-mode/--debug-index)
+# - quicklook control in debug mode is also CLI-only
+#   (--debug-plot/--no-debug-plot/--debug-plot-count/--debug-plot-prefix)
 #
 # Example:
 #   python -m shock.wavefit -j analyze sample/wavefit-config.toml
@@ -14,6 +16,8 @@ overwrite = true
 
 [analyze]
 wavefile = "wavefilter"
+# Optional source for local background context (raw B and J)
+rawfile = "wavetool"
 fitfile = "wavefit"
 
 # Gaussian window in physical units
@@ -50,7 +54,4 @@ ky_init_scan = [-0.8, -0.4, 0.0, 0.4, 0.8]
 good_nrmse_bal_max = 0.40
 good_lambda_factor_max = 4.0
 
-# Diagnostic plots (generated only in --debug mode)
-debug_plot = true
-debug_plot_count = 8
-debug_plot_prefix = "wavefit-debug"
+# Diagnostic plot behavior is controlled by CLI flags.
