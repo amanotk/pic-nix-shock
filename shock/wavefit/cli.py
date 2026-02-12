@@ -14,7 +14,7 @@ import tqdm
 try:
     from mpi4py import MPI  # type: ignore[import-not-found]
     from mpi4py.futures import MPICommExecutor  # type: ignore[import-not-found]
-except ImportError:
+except Exception:
     MPI = None
     MPICommExecutor = None
 
