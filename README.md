@@ -44,6 +44,8 @@ pip install -e ".[mpi]"
 - Creates the `work/` directory if it doesn't exist
 - Sets up `.shock.env` from example (if not already present)
 - Syncs the Python environment with `uv sync` (or pip fallback when `uv` is missing)
+- If MPI toolchain is available (`MPICC` + `MPIEXEC`), builds `mpi4py` with `MPICC`
+- If MPI toolchain is missing, keeps a serial-only setup (no failure)
 - Run once after cloning or pulling
 
 ## Directory Structure Contract
@@ -86,6 +88,9 @@ Example `.shock.env`:
 ```bash
 SHOCK_DATA_ROOT=./data
 SHOCK_WORK_ROOT=./work
+# Optional on multi-MPI systems
+# MPICC=/path/to/mpicc
+# MPIEXEC=/path/to/mpiexec
 ```
 
 ## Batch Scheduler Usage

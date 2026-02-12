@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import concurrent.futures
 import os
 import pathlib
 import pickle
@@ -10,6 +11,13 @@ import h5py
 import numpy as np
 import scipy.ndimage as ndimage
 import tqdm
+
+try:
+    from mpi4py import MPI  # type: ignore[import-not-found]
+    from mpi4py.futures import MPICommExecutor  # type: ignore[import-not-found]
+except ImportError:
+    MPI = None
+    MPICommExecutor = None
 
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
@@ -115,6 +123,127 @@ def get_h5_group(fileobj, key):
     if not isinstance(obj, h5py.Group):
         raise TypeError("{} must be a group".format(key))
     return obj
+
+
+def get_mpi_size_rank():
+    if MPI is None:
+        return 1, 0
+    return MPI.COMM_WORLD.Get_size(), MPI.COMM_WORLD.Get_rank()
+
+
+def is_root_rank():
+    _, rank = get_mpi_size_rank()
+    return rank == 0
+
+
+def format_progress_line(completed, total):
+    total = max(int(total), 1)
+    completed = max(0, min(int(completed), total))
+    percent = 100.0 * completed / total
+    remaining = total - completed
+    return "{}/{} ({:5.1f}%) remaining={}".format(completed, total, percent, remaining)
+
+
+def fit_single_snapshot_worker(E, B, xx, yy, b0, options, B_background=None, J_background=None):
+    fit_options = dict(options)
+    if bool(options.get("debug", False)):
+        fit_options.setdefault("max_candidates", 32)
+    else:
+        fit_options.pop("max_candidates", None)
+
+    sigma = float(options.get("sigma", 3.0))
+    envelope = np.linalg.norm(B, axis=-1) / b0
+    cand_ix, cand_iy, env_used = pick_candidate_points(xx, yy, envelope, sigma, fit_options)
+
+    fit_results = []
+    for ix, iy in zip(cand_ix, cand_iy):
+        x0 = float(xx[ix])
+        y0 = float(yy[iy])
+        fit_result = fit_one_candidate(
+            E,
+            B,
+            xx,
+            yy,
+            x0,
+            y0,
+            sigma,
+            fit_options,
+            B_background=B_background,
+            J_background=J_background,
+        )
+        fit_result["ix"] = int(ix)
+        fit_result["iy"] = int(iy)
+        fit_results.append(fit_result)
+
+    return {
+        "candidate_ix": cand_ix,
+        "candidate_iy": cand_iy,
+        "envelope": env_used,
+        "fits": fit_results,
+    }
+
+
+def cleanup_large_arrays_in_result(result):
+    for item in result["fits"]:
+        for key in LARGE_ARRAY_KEYS:
+            if key in item:
+                del item[key]
+
+
+def analyze_snapshot_worker(task):
+    wavefile = task["wavefile"]
+    rawfile = task.get("rawfile", None)
+    snapshot_index = int(task["snapshot_index"])
+    raw_index = task.get("raw_index", None)
+    b0 = float(task["b0"])
+    options = dict(task["options"])
+
+    with h5py.File(wavefile, "r") as fp_wave:
+        wave_step_ds = get_h5_dataset(fp_wave, "step")
+        wave_t_ds = get_h5_dataset(fp_wave, "t")
+        wave_x_ds = get_h5_dataset(fp_wave, "x")
+        wave_y_ds = get_h5_dataset(fp_wave, "y")
+        wave_E_ds = get_h5_dataset(fp_wave, "E")
+        wave_B_ds = get_h5_dataset(fp_wave, "B")
+
+        step = int(wave_step_ds[snapshot_index])
+        time = float(wave_t_ds[snapshot_index])
+        x = wave_x_ds[snapshot_index, ...] if wave_x_ds.ndim == 2 else wave_x_ds[()]
+        y = wave_y_ds[snapshot_index, ...] if wave_y_ds.ndim == 2 else wave_y_ds[()]
+        E = wave_E_ds[snapshot_index, ...]
+        B = wave_B_ds[snapshot_index, ...]
+
+    B_background = None
+    J_background = None
+    if rawfile is not None and raw_index is not None:
+        raw_index = int(raw_index)
+        with h5py.File(rawfile, "r") as fp_raw:
+            if "B" in fp_raw:
+                B_background = get_h5_dataset(fp_raw, "B")[raw_index, ...]
+            if "J" in fp_raw:
+                J_background = get_h5_dataset(fp_raw, "J")[raw_index, ...]
+            elif "Je" in fp_raw and "Ji" in fp_raw:
+                Je = get_h5_dataset(fp_raw, "Je")[raw_index, ...]
+                Ji = get_h5_dataset(fp_raw, "Ji")[raw_index, ...]
+                J_background = np.concatenate([Je, Ji], axis=-1)
+
+    result = fit_single_snapshot_worker(
+        E,
+        B,
+        x,
+        y,
+        b0,
+        options,
+        B_background=B_background,
+        J_background=J_background,
+    )
+    cleanup_large_arrays_in_result(result)
+    return {
+        "snapshot_index": snapshot_index,
+        "step": step,
+        "time": time,
+        "result": result,
+    }
 
 
 def select_debug_indices(size, debug=False, debug_count=8, debug_mode="uniform"):
@@ -437,12 +566,16 @@ class WaveFitAnalyzer(base.JobExecutor):
             save_quickcheck_plot_12panel(str(filename), item, title=title, rms_normalize=True)
 
     def cleanup_large_arrays(self, result):
-        for item in result["fits"]:
-            for key in LARGE_ARRAY_KEYS:
-                if key in item:
-                    del item[key]
+        cleanup_large_arrays_in_result(result)
 
-    def main(self, basename=None):
+    def should_use_mpi_for_analyze(self):
+        if bool(self.options.get("debug", False)):
+            return False
+        if MPI is None or MPICommExecutor is None:
+            return False
+        return MPI.COMM_WORLD.Get_size() > 1
+
+    def run_analyze_serial(self):
         wavefile = self.get_filename(self.options.get("wavefile", "wavefilter"), ".h5")
         fitfile = self.get_filename(self.options.get("fitfile", "wavefit"), ".h5")
         debug = bool(self.options.get("debug", False))
@@ -481,7 +614,11 @@ class WaveFitAnalyzer(base.JobExecutor):
                 nstep = int(wave_step_ds.shape[0])
                 snapshot_indices = self.select_snapshot_indices(nstep)
 
-                for snapshot_index in tqdm.tqdm(snapshot_indices):
+                for snapshot_index in tqdm.tqdm(
+                    snapshot_indices,
+                    desc="analyze(serial)",
+                    disable=not is_root_rank(),
+                ):
                     step = int(wave_step_ds[snapshot_index])
                     time = float(wave_t_ds[snapshot_index])
 
@@ -521,6 +658,129 @@ class WaveFitAnalyzer(base.JobExecutor):
             if fp_raw is not None:
                 fp_raw.close()
 
+    def run_analyze_mpi(self):
+        if MPI is None or MPICommExecutor is None:
+            raise RuntimeError("mpi4py is not available")
+        mpi_size, _ = get_mpi_size_rank()
+
+        wavefile = self.get_filename(self.options.get("wavefile", "wavefilter"), ".h5")
+        fitfile = self.get_filename(self.options.get("fitfile", "wavefit"), ".h5")
+        rawfile_opt = self.options.get("rawfile", "wavetool")
+        rawfile = self.get_filename(rawfile_opt, ".h5") if rawfile_opt else None
+        overwrite = bool(self.options.get("overwrite", False))
+        with MPICommExecutor() as executor:
+            if executor is None:
+                return
+
+            if os.path.exists(fitfile) and overwrite:
+                os.remove(fitfile)
+            if os.path.exists(fitfile) and not overwrite:
+                print(
+                    "Output file {} already exists. Set overwrite=true to replace.".format(fitfile)
+                )
+                return
+
+            with h5py.File(wavefile, "r") as fp_wave, h5py.File(fitfile, "w") as fp_fit:
+                parameter = extract_parameter_from_wavefile(fp_wave)
+                if parameter is None:
+                    parameter = self.parameter
+                b0 = self.get_reference_b0(parameter)
+
+                step_to_raw_index = {}
+                if rawfile is not None and os.path.exists(rawfile):
+                    with h5py.File(rawfile, "r") as fp_raw:
+                        if "step" in fp_raw:
+                            raw_steps = get_h5_dataset(fp_raw, "step")[...]
+                            step_to_raw_index = {int(s): i for i, s in enumerate(raw_steps)}
+
+                wave_step_ds = get_h5_dataset(fp_wave, "step")
+                nstep = int(wave_step_ds.shape[0])
+                snapshot_indices = self.select_snapshot_indices(nstep)
+
+                tasks = []
+                rawfile_for_task = (
+                    rawfile if (rawfile is not None and os.path.exists(rawfile)) else None
+                )
+                for snapshot_index in snapshot_indices:
+                    step = int(wave_step_ds[snapshot_index])
+                    tasks.append(
+                        {
+                            "wavefile": wavefile,
+                            "rawfile": rawfile_for_task,
+                            "snapshot_index": int(snapshot_index),
+                            "raw_index": step_to_raw_index.get(step, None),
+                            "b0": b0,
+                            "options": dict(self.options),
+                        }
+                    )
+
+                total_tasks = len(tasks)
+                print(
+                    "[wavefit] analyze: {} snapshots across {} ranks".format(total_tasks, mpi_size),
+                    flush=True,
+                )
+
+                use_tqdm = sys.stderr.isatty()
+                pbar = None
+                if use_tqdm:
+                    pbar = tqdm.tqdm(
+                        total=total_tasks,
+                        desc="analyze",
+                        disable=False,
+                        dynamic_ncols=True,
+                        leave=True,
+                        file=sys.stderr,
+                    )
+                    pbar.set_postfix(remaining=total_tasks)
+                    pbar.refresh()
+                else:
+                    print(
+                        "[wavefit] analyze {}".format(format_progress_line(0, total_tasks)),
+                        flush=True,
+                    )
+
+                future_to_meta = {
+                    executor.submit(analyze_snapshot_worker, task): int(task["snapshot_index"])
+                    for task in tasks
+                }
+
+                try:
+                    completed = 0
+                    for future in concurrent.futures.as_completed(future_to_meta):
+                        snapshot_index = future_to_meta[future]
+                        try:
+                            worker_result = future.result()
+                        except Exception as exc:
+                            raise RuntimeError(
+                                "MPI wavefit failed at snapshot index {}".format(snapshot_index)
+                            ) from exc
+                        self.write_snapshot_result(
+                            fp_fit,
+                            int(worker_result["step"]),
+                            float(worker_result["time"]),
+                            worker_result["result"],
+                        )
+                        if use_tqdm and pbar is not None:
+                            pbar.update(1)
+                            pbar.set_postfix(remaining=(total_tasks - pbar.n))
+                        else:
+                            completed += 1
+                            print(
+                                "[wavefit] analyze {}".format(
+                                    format_progress_line(completed, total_tasks)
+                                ),
+                                flush=True,
+                            )
+                finally:
+                    if pbar is not None:
+                        pbar.close()
+
+    def main(self, basename=None):
+        if self.should_use_mpi_for_analyze():
+            self.run_analyze_mpi()
+        else:
+            self.run_analyze_serial()
+
     def main_plot(self):
         wavefile = self.get_filename(self.options.get("wavefile", "wavefilter"), ".h5")
         fitfile = self.get_filename(self.options.get("fitfile", "wavefit"), ".h5")
@@ -551,12 +811,35 @@ class WaveFitAnalyzer(base.JobExecutor):
             wave_y_ds = get_h5_dataset(fp_wave, "y")
             wave_B_ds = get_h5_dataset(fp_wave, "B")
 
-            snapshot_indices = self.select_snapshot_indices(len(fit_steps))
             wave_steps = wave_step_ds[...]
             step_to_wave_index = {int(step): i for i, step in enumerate(wave_steps)}
+            fit_step_set = set(fit_steps)
 
-            for snapshot_index in tqdm.tqdm(snapshot_indices):
-                step = int(fit_steps[int(snapshot_index)])
+            snapshot_indices_opt = self.options.get("snapshot_indices", [])
+            if len(snapshot_indices_opt) > 0:
+                requested_indices = np.array(
+                    sorted(set(int(i) for i in snapshot_indices_opt)), dtype=np.int64
+                )
+                if np.any(requested_indices < 0) or np.any(
+                    requested_indices >= wave_steps.shape[0]
+                ):
+                    raise ValueError(
+                        "snapshot index out of range for wavefile (nstep={}): {}".format(
+                            int(wave_steps.shape[0]), requested_indices.tolist()
+                        )
+                    )
+                selected_steps = [
+                    int(wave_steps[i])
+                    for i in requested_indices
+                    if int(wave_steps[i]) in fit_step_set
+                ]
+                if len(selected_steps) == 0:
+                    raise ValueError("None of requested snapshot indices are available in fitfile")
+            else:
+                snapshot_indices = self.select_snapshot_indices(len(fit_steps))
+                selected_steps = [int(fit_steps[int(i)]) for i in snapshot_indices]
+
+            for step in tqdm.tqdm(selected_steps, desc="plot", disable=not is_root_rank()):
                 grp_name = "snapshots/{:08d}".format(step)
                 grp = get_h5_group(fp_fit, grp_name)
 
@@ -597,7 +880,7 @@ class WaveFitAnalyzer(base.JobExecutor):
                 )
 
                 filename = outdir / (
-                    "{:s}-envelope-{:04d}.png".format(fitfile_basename, int(snapshot_index))
+                    "{:s}-envelope-{:04d}.png".format(fitfile_basename, int(wave_index))
                 )
                 save_envelope_map_plot(
                     str(filename),
@@ -708,13 +991,24 @@ def main():
         obj.options["debug_plot_count"] = debug_plot_count
         obj.options["debug_plot_prefix"] = debug_plot_prefix
 
-    jobs = args.job.split(",")
-    for job in tqdm.tqdm(jobs):
+    jobs = [job.strip() for job in args.job.split(",") if job.strip()]
+    if len(jobs) == 0:
+        raise ValueError("No jobs specified. Use -j analyze,plot or a subset.")
+    mpi_size, mpi_rank = get_mpi_size_rank()
+    for job in jobs:
         if job == "analyze":
+            if mpi_rank == 0:
+                print("[wavefit] running analyze", flush=True)
             obj = WaveFitAnalyzer(config)
             apply_runtime_options(obj)
+            if mpi_size > 1 and debug and mpi_rank != 0:
+                continue
             obj.main()
         elif job == "plot":
+            if mpi_size > 1 and mpi_rank != 0:
+                continue
+            if mpi_rank == 0:
+                print("[wavefit] running plot", flush=True)
             obj = WaveFitAnalyzer(config, option_section="plot")
             apply_runtime_options(obj)
             obj.main_plot()

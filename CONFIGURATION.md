@@ -217,6 +217,11 @@ Notes:
 
 - AI quick reference (operational semantics):
   - Non-debug run analyzes all snapshots in the input `wavefile`.
+  - Analyze runs snapshot-parallel under MPI automatically when launched with
+    multiple ranks (e.g., `mpiexec -n N ...`).
+  - MPI analyze uses `mpi4py.futures.MPICommExecutor` with root-only HDF5 writes.
+  - Debug analyze (`--debug`) always runs serially.
+  - `plot` remains serial (root rank only under MPI launch).
   - `--debug` enables subset mode (`--debug-count`, `--debug-mode`, `--debug-index`).
   - `plot` job reads existing `fitfile` snapshots and renders envelope maps.
   - Debug quicklook controls are CLI-only (`--debug-plot`, `--no-debug-plot`,

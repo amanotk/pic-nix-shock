@@ -140,3 +140,12 @@ fitted snapshot from `fitfile.h5` + `wavefile.h5`.
 - Overlay points include only candidates with `is_good=1`.
 - Output filename pattern: `<fitfile>-envelope-<index>.png`.
 - `--debug`, `--debug-count`, and `--debug-index` may be used to render a subset.
+
+## MPI Execution Notes
+
+- `analyze` automatically uses snapshot-level MPI parallelism when launched under
+  multi-rank MPI (`mpiexec -n N ...`).
+- In MPI mode, root uses `mpi4py.futures.MPICommExecutor`, workers fit snapshots,
+  and root writes results to HDF5.
+- `analyze --debug` remains serial by design.
+- `plot` remains serial (root rank only when launched under MPI).
