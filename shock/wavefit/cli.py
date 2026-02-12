@@ -4,6 +4,7 @@ import os
 import pathlib
 import pickle
 import sys
+from typing import Union
 
 import h5py
 import numpy as np
@@ -19,7 +20,7 @@ except ImportError:
 
 from .fit import fit_one_candidate
 from .model import periodic_delta
-from .plot import save_quickcheck_plot_12panel
+from .plot import save_envelope_map_plot, save_quickcheck_plot_12panel
 
 
 RESULT_FLOAT_KEYS = [
@@ -98,6 +99,22 @@ def extract_parameter_from_wavefile(fileobj):
         ):
             return configuration["parameter"]
     return None
+
+
+def get_h5_dataset(fileobj, key):
+    # type: (Union[h5py.File, h5py.Group], str) -> h5py.Dataset
+    obj = fileobj[key]
+    if not isinstance(obj, h5py.Dataset):
+        raise TypeError("{} must be a dataset".format(key))
+    return obj
+
+
+def get_h5_group(fileobj, key):
+    # type: (Union[h5py.File, h5py.Group], str) -> h5py.Group
+    obj = fileobj[key]
+    if not isinstance(obj, h5py.Group):
+        raise TypeError("{} must be a group".format(key))
+    return obj
 
 
 def select_debug_indices(size, debug=False, debug_count=8, debug_mode="uniform"):
@@ -180,11 +197,20 @@ def pick_candidate_points(xx, yy, envelope, sigma, options):
 
 
 class WaveFitAnalyzer(base.JobExecutor):
-    def __init__(self, config_file):
+    def __init__(self, config_file, option_section="analyze"):
         super().__init__(config_file)
-        if "analyze" in self.options:
-            for key in self.options["analyze"]:
-                self.options[key] = self.options["analyze"][key]
+        self._merge_option_sections(option_section)
+
+    def _merge_option_sections(self, option_section):
+        sections = []
+        if option_section == "plot" and "analyze" in self.options:
+            sections.append("analyze")
+        if option_section in self.options:
+            sections.append(option_section)
+
+        for section in sections:
+            for key in self.options[section]:
+                self.options[key] = self.options[section][key]
 
     def read_parameter(self):
         try:
@@ -205,6 +231,59 @@ class WaveFitAnalyzer(base.JobExecutor):
         if b0 <= 0.0 or not np.isfinite(b0):
             raise ValueError("computed B0 is invalid")
         return float(b0)
+
+    def get_wci(self, parameter=None):
+        source = parameter if isinstance(parameter, dict) else self.parameter
+        if not isinstance(source, dict):
+            return np.nan
+        if "sigma" not in source or "mime" not in source:
+            return np.nan
+
+        sigma0 = float(source["sigma"])
+        mime = float(source["mime"])
+        if mime == 0.0:
+            return np.nan
+        return float(np.sqrt(sigma0) / mime)
+
+    def select_snapshot_indices(self, nstep):
+        snapshot_indices_opt = self.options.get("snapshot_indices", [])
+        if len(snapshot_indices_opt) > 0:
+            indices = []
+            for index in snapshot_indices_opt:
+                snapshot_index = int(index)
+                if snapshot_index < 0 or snapshot_index >= nstep:
+                    raise ValueError(
+                        "snapshot index out of range: {} (nstep={})".format(snapshot_index, nstep)
+                    )
+                indices.append(snapshot_index)
+            snapshot_indices = np.array(sorted(set(indices)), dtype=np.int64)
+            if snapshot_indices.size == 0:
+                raise ValueError("No snapshots selected. Adjust snapshot selection options.")
+            return snapshot_indices
+
+        debug = bool(self.options.get("debug", False))
+        debug_count = int(self.options.get("debug_count", 8))
+        debug_mode = str(self.options.get("debug_mode", "uniform"))
+        debug_indices = self.options.get("debug_indices", [])
+
+        if debug and len(debug_indices) > 0:
+            indices = []
+            for index in debug_indices:
+                snapshot_index = int(index)
+                if snapshot_index < 0 or snapshot_index >= nstep:
+                    raise ValueError(
+                        "debug snapshot index out of range: {} (nstep={})".format(
+                            snapshot_index, nstep
+                        )
+                    )
+                indices.append(snapshot_index)
+            snapshot_indices = np.array(sorted(set(indices)), dtype=np.int64)
+        else:
+            snapshot_indices = select_debug_indices(nstep, debug, debug_count, debug_mode)
+
+        if snapshot_indices.size == 0:
+            raise ValueError("No snapshots selected. Adjust debug settings.")
+        return snapshot_indices
 
     def fit_single_snapshot(self, E, B, xx, yy, b0, B_background=None, J_background=None):
         fit_options = dict(self.options)
@@ -257,7 +336,6 @@ class WaveFitAnalyzer(base.JobExecutor):
         nfit = len(fits)
         grp.create_dataset("candidate_ix", data=result["candidate_ix"])
         grp.create_dataset("candidate_iy", data=result["candidate_iy"])
-        grp.create_dataset("envelope", data=result["envelope"])
 
         for key in RESULT_FLOAT_KEYS:
             arr = np.full((nfit,), np.nan, dtype=np.float64)
@@ -290,12 +368,10 @@ class WaveFitAnalyzer(base.JobExecutor):
             if isinstance(value, (int, float, str, bool)):
                 grp.attrs["option_{}".format(key)] = value
 
-    def generate_diagnostics(self, result, xx, yy, step):
+    def generate_diagnostics(self, result, xx, yy, step, time=None, wci=None):
         if not bool(self.options.get("debug_plot", True)):
             return
         fit_results = result["fits"]
-        if len(fit_results) == 0:
-            return
 
         debug_plot_count = int(self.options.get("debug_plot_count", 8))
         if debug_plot_count < 0:
@@ -303,6 +379,26 @@ class WaveFitAnalyzer(base.JobExecutor):
         output_prefix = str(self.options.get("debug_plot_prefix", "wavefit-debug"))
         outdir = pathlib.Path(self.get_filename(output_prefix, "")).parent
         outdir.mkdir(parents=True, exist_ok=True)
+
+        good_points = [item for item in fit_results if bool(item.get("is_good", False))]
+        good_x = [float(xx[int(item["ix"])]) for item in good_points if "ix" in item]
+        good_y = [float(yy[int(item["iy"])]) for item in good_points if "iy" in item]
+        envelope_map_file = outdir / ("{:s}-envelope-{:08d}.png".format(output_prefix, int(step)))
+        save_envelope_map_plot(
+            str(envelope_map_file),
+            result["envelope"],
+            xx,
+            yy,
+            good_x,
+            good_y,
+            step,
+            time=time,
+            wci=wci,
+            threshold=self.options.get("envelope_threshold", np.nan),
+        )
+
+        if len(fit_results) == 0:
+            return
 
         rank = np.argsort(
             [item.get("nrmse_balanced", item.get("nrmse", np.inf)) for item in fit_results]
@@ -346,13 +442,10 @@ class WaveFitAnalyzer(base.JobExecutor):
                 if key in item:
                     del item[key]
 
-    def main(self):
+    def main(self, basename=None):
         wavefile = self.get_filename(self.options.get("wavefile", "wavefilter"), ".h5")
         fitfile = self.get_filename(self.options.get("fitfile", "wavefit"), ".h5")
         debug = bool(self.options.get("debug", False))
-        debug_count = int(self.options.get("debug_count", 8))
-        debug_mode = str(self.options.get("debug_mode", "uniform"))
-        debug_indices = self.options.get("debug_indices", [])
         overwrite = bool(self.options.get("overwrite", False))
         if os.path.exists(fitfile) and overwrite:
             os.remove(fitfile)
@@ -367,6 +460,7 @@ class WaveFitAnalyzer(base.JobExecutor):
                 if parameter is None:
                     parameter = self.parameter
                 b0 = self.get_reference_b0(parameter)
+                wci = self.get_wci(parameter)
 
                 rawfile_opt = self.options.get("rawfile", "wavetool")
                 rawfile = self.get_filename(rawfile_opt, ".h5") if rawfile_opt else None
@@ -374,44 +468,27 @@ class WaveFitAnalyzer(base.JobExecutor):
                 if rawfile is not None and os.path.exists(rawfile):
                     fp_raw = h5py.File(rawfile, "r")
                     if "step" in fp_raw:
-                        raw_steps = fp_raw["step"][...]
+                        raw_steps = get_h5_dataset(fp_raw, "step")[...]
                         step_to_raw_index = {int(s): i for i, s in enumerate(raw_steps)}
 
-                nstep = int(fp_wave["step"].shape[0])
-                if debug and len(debug_indices) > 0:
-                    indices = []
-                    for index in debug_indices:
-                        snapshot_index = int(index)
-                        if snapshot_index < 0 or snapshot_index >= nstep:
-                            raise ValueError(
-                                "debug snapshot index out of range: {} (nstep={})".format(
-                                    snapshot_index, nstep
-                                )
-                            )
-                        indices.append(snapshot_index)
-                    snapshot_indices = np.array(sorted(set(indices)), dtype=np.int64)
-                else:
-                    snapshot_indices = select_debug_indices(nstep, debug, debug_count, debug_mode)
+                wave_step_ds = get_h5_dataset(fp_wave, "step")
+                wave_t_ds = get_h5_dataset(fp_wave, "t")
+                wave_x_ds = get_h5_dataset(fp_wave, "x")
+                wave_y_ds = get_h5_dataset(fp_wave, "y")
+                wave_E_ds = get_h5_dataset(fp_wave, "E")
+                wave_B_ds = get_h5_dataset(fp_wave, "B")
 
-                if snapshot_indices.size == 0:
-                    raise ValueError("No snapshots selected. Adjust debug settings.")
+                nstep = int(wave_step_ds.shape[0])
+                snapshot_indices = self.select_snapshot_indices(nstep)
 
                 for snapshot_index in tqdm.tqdm(snapshot_indices):
-                    step = int(fp_wave["step"][snapshot_index])
-                    time = float(fp_wave["t"][snapshot_index])
+                    step = int(wave_step_ds[snapshot_index])
+                    time = float(wave_t_ds[snapshot_index])
 
-                    x = (
-                        fp_wave["x"][snapshot_index, ...]
-                        if fp_wave["x"].ndim == 2
-                        else fp_wave["x"][()]
-                    )
-                    y = (
-                        fp_wave["y"][snapshot_index, ...]
-                        if fp_wave["y"].ndim == 2
-                        else fp_wave["y"][()]
-                    )
-                    E = fp_wave["E"][snapshot_index, ...]
-                    B = fp_wave["B"][snapshot_index, ...]
+                    x = wave_x_ds[snapshot_index, ...] if wave_x_ds.ndim == 2 else wave_x_ds[()]
+                    y = wave_y_ds[snapshot_index, ...] if wave_y_ds.ndim == 2 else wave_y_ds[()]
+                    E = wave_E_ds[snapshot_index, ...]
+                    B = wave_B_ds[snapshot_index, ...]
 
                     B_background = None
                     J_background = None
@@ -419,12 +496,12 @@ class WaveFitAnalyzer(base.JobExecutor):
                         raw_index = step_to_raw_index.get(step, None)
                         if raw_index is not None:
                             if "B" in fp_raw:
-                                B_background = fp_raw["B"][raw_index, ...]
+                                B_background = get_h5_dataset(fp_raw, "B")[raw_index, ...]
                             if "J" in fp_raw:
-                                J_background = fp_raw["J"][raw_index, ...]
+                                J_background = get_h5_dataset(fp_raw, "J")[raw_index, ...]
                             elif "Je" in fp_raw and "Ji" in fp_raw:
-                                Je = fp_raw["Je"][raw_index, ...]
-                                Ji = fp_raw["Ji"][raw_index, ...]
+                                Je = get_h5_dataset(fp_raw, "Je")[raw_index, ...]
+                                Ji = get_h5_dataset(fp_raw, "Ji")[raw_index, ...]
                                 J_background = np.concatenate([Je, Ji], axis=-1)
 
                     result = self.fit_single_snapshot(
@@ -437,12 +514,101 @@ class WaveFitAnalyzer(base.JobExecutor):
                         J_background=J_background,
                     )
                     if debug:
-                        self.generate_diagnostics(result, x, y, step)
+                        self.generate_diagnostics(result, x, y, step, time=time, wci=wci)
                     self.cleanup_large_arrays(result)
                     self.write_snapshot_result(fp_fit, step, time, result)
         finally:
             if fp_raw is not None:
                 fp_raw.close()
+
+    def main_plot(self):
+        wavefile = self.get_filename(self.options.get("wavefile", "wavefilter"), ".h5")
+        fitfile = self.get_filename(self.options.get("fitfile", "wavefit"), ".h5")
+        output_prefix = str(self.options.get("plot_prefix", "wavefit-envelope"))
+
+        outdir = pathlib.Path(self.get_filename(output_prefix, "")).parent
+        outdir.mkdir(parents=True, exist_ok=True)
+
+        with h5py.File(wavefile, "r") as fp_wave, h5py.File(fitfile, "r") as fp_fit:
+            parameter = extract_parameter_from_wavefile(fp_wave)
+            if parameter is None:
+                parameter = self.parameter
+            b0 = self.get_reference_b0(parameter)
+            wci = self.get_wci(parameter)
+
+            if "snapshots" not in fp_fit:
+                raise KeyError("fitfile does not contain snapshots group")
+
+            snapshots_group = get_h5_group(fp_fit, "snapshots")
+
+            fit_steps = sorted(int(step) for step in snapshots_group.keys())
+            if len(fit_steps) == 0:
+                raise ValueError("No fitted snapshots found in fitfile")
+
+            wave_step_ds = get_h5_dataset(fp_wave, "step")
+            wave_t_ds = get_h5_dataset(fp_wave, "t")
+            wave_x_ds = get_h5_dataset(fp_wave, "x")
+            wave_y_ds = get_h5_dataset(fp_wave, "y")
+            wave_B_ds = get_h5_dataset(fp_wave, "B")
+
+            snapshot_indices = self.select_snapshot_indices(len(fit_steps))
+            wave_steps = wave_step_ds[...]
+            step_to_wave_index = {int(step): i for i, step in enumerate(wave_steps)}
+
+            for snapshot_index in tqdm.tqdm(snapshot_indices):
+                step = int(fit_steps[int(snapshot_index)])
+                grp_name = "snapshots/{:08d}".format(step)
+                grp = get_h5_group(fp_fit, grp_name)
+
+                if step not in step_to_wave_index:
+                    raise KeyError("step {:08d} not found in wavefile".format(step))
+                wave_index = int(step_to_wave_index[step])
+
+                x = wave_x_ds[wave_index, ...] if wave_x_ds.ndim == 2 else wave_x_ds[()]
+                y = wave_y_ds[wave_index, ...] if wave_y_ds.ndim == 2 else wave_y_ds[()]
+                time = float(wave_t_ds[wave_index])
+                B = wave_B_ds[wave_index, ...]
+                envelope = np.linalg.norm(B, axis=-1) / b0
+
+                if "ix" in grp and "iy" in grp:
+                    cand_ix = np.asarray(get_h5_dataset(grp, "ix")[...], dtype=np.int64)
+                    cand_iy = np.asarray(get_h5_dataset(grp, "iy")[...], dtype=np.int64)
+                else:
+                    cand_ix = np.asarray(get_h5_dataset(grp, "candidate_ix")[...], dtype=np.int64)
+                    cand_iy = np.asarray(get_h5_dataset(grp, "candidate_iy")[...], dtype=np.int64)
+
+                if "is_good" in grp:
+                    good_mask = np.asarray(get_h5_dataset(grp, "is_good")[...], dtype=np.int8) > 0
+                else:
+                    good_mask = np.ones((cand_ix.size,), dtype=bool)
+
+                valid = (
+                    good_mask
+                    & (cand_ix >= 0)
+                    & (cand_ix < x.size)
+                    & (cand_iy >= 0)
+                    & (cand_iy < y.size)
+                )
+
+                good_x = x[cand_ix[valid]].tolist()
+                good_y = y[cand_iy[valid]].tolist()
+                threshold = grp.attrs.get(
+                    "option_envelope_threshold", self.options.get("envelope_threshold", np.nan)
+                )
+
+                filename = outdir / ("{:s}-{:08d}.png".format(output_prefix, step))
+                save_envelope_map_plot(
+                    str(filename),
+                    envelope,
+                    x,
+                    y,
+                    good_x,
+                    good_y,
+                    step,
+                    time=time,
+                    wci=wci,
+                    threshold=threshold,
+                )
 
 
 def main():
@@ -454,7 +620,7 @@ def main():
         "--job",
         type=str,
         default="analyze",
-        help="Type of job to perform (analyze)",
+        help="Type of job to perform (analyze, plot)",
     )
     parser.add_argument(
         "--debug",
@@ -483,6 +649,14 @@ def main():
         help="explicit snapshot index to process in debug mode (repeatable)",
     )
     parser.add_argument(
+        "--snapshot-index",
+        dest="snapshot_indices",
+        type=int,
+        action="append",
+        default=[],
+        help="explicit snapshot index to process (works without --debug; repeatable)",
+    )
+    parser.add_argument(
         "--debug-plot",
         dest="debug_plot",
         action="store_true",
@@ -507,6 +681,12 @@ def main():
         default="wavefit-debug",
         help="filename prefix for debug quicklook plots",
     )
+    parser.add_argument(
+        "--plot-prefix",
+        type=str,
+        default="wavefit-envelope",
+        help="filename prefix for envelope map outputs in plot job",
+    )
     parser.add_argument("config", nargs=1, help="configuration file")
     args = parser.parse_args()
     config = args.config[0]
@@ -514,9 +694,11 @@ def main():
     debug_count = args.debug_count
     debug_mode = args.debug_mode
     debug_indices = args.debug_indices
+    snapshot_indices = args.snapshot_indices
     debug_plot = args.debug_plot
     debug_plot_count = args.debug_plot_count
     debug_plot_prefix = args.debug_plot_prefix
+    plot_prefix = args.plot_prefix
 
     if debug_plot_count < 0:
         raise ValueError("debug_plot_count must be a non-negative integer")
@@ -526,9 +708,11 @@ def main():
         obj.options["debug_count"] = debug_count
         obj.options["debug_mode"] = debug_mode
         obj.options["debug_indices"] = debug_indices
+        obj.options["snapshot_indices"] = snapshot_indices
         obj.options["debug_plot"] = debug_plot
         obj.options["debug_plot_count"] = debug_plot_count
         obj.options["debug_plot_prefix"] = debug_plot_prefix
+        obj.options["plot_prefix"] = plot_prefix
 
     jobs = args.job.split(",")
     for job in tqdm.tqdm(jobs):
@@ -536,5 +720,9 @@ def main():
             obj = WaveFitAnalyzer(config)
             apply_runtime_options(obj)
             obj.main()
+        elif job == "plot":
+            obj = WaveFitAnalyzer(config, option_section="plot")
+            apply_runtime_options(obj)
+            obj.main_plot()
         else:
             raise ValueError("Unknown job: {:s}".format(job))

@@ -55,3 +55,9 @@ good_nrmse_bal_max = 0.40
 good_lambda_factor_max = 4.0
 
 # Diagnostic plot behavior is controlled by CLI flags.
+
+[plot]
+wavefile = "wavefilter"
+fitfile = "wavefit"
+# Output: <plot_prefix>-<step>.png under work/<run>/<dirname>/
+plot_prefix = "wavefit-envelope"

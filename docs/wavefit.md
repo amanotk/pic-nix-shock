@@ -130,3 +130,13 @@ wavefit.save_quickcheck_plot_12panel(
 
 For iterative, human-in-the-loop fitting-quality sessions, use the generic
 playbook in `docs/wavefit-interactive-tuning.md`.
+
+## Envelope Map Plot Job
+
+`python -m shock.wavefit -j plot <config.toml>` renders one envelope map PNG per
+fitted snapshot from `fitfile.h5` + `wavefile.h5`.
+
+- Input snapshots come from `fitfile` (`snapshots/<step>`).
+- Overlay points include only candidates with `is_good=1`.
+- Output filename pattern: `<plot_prefix>-<step>.png`.
+- `--debug`, `--debug-count`, and `--debug-index` may be used to render a subset.

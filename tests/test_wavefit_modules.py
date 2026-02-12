@@ -298,3 +298,68 @@ def test_wavefit_cli_select_debug_indices_modes():
     assert uniform.size == 4
     assert int(uniform[0]) == 0
     assert int(uniform[-1]) == 9
+
+
+def test_wavefit_plot_job_writes_envelope_maps(temp_dir, monkeypatch):
+    import h5py
+    import msgpack
+    import toml
+
+    from shock.wavefit.cli import WaveFitAnalyzer
+
+    work_root = temp_dir / "work"
+    data_root = temp_dir / "data"
+    run = "run1"
+    dirname = "wf"
+    monkeypatch.setenv("SHOCK_WORK_ROOT", str(work_root))
+    monkeypatch.setenv("SHOCK_DATA_ROOT", str(data_root))
+
+    profile_dir = data_root / run / "data"
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    profile_path = profile_dir / "profile.msgpack"
+    with open(profile_path, "wb") as fp:
+        msgpack.dump({"configuration": {"parameter": {"sigma": 1.0, "u0": 0.2, "mime": 25.0}}}, fp)
+
+    cfg_path = temp_dir / "wavefit-plot.toml"
+    cfg = {
+        "run": run,
+        "dirname": dirname,
+        "profile": "data/profile.msgpack",
+        "plot": {
+            "wavefile": "wavefilter",
+            "fitfile": "wavefit",
+            "plot_prefix": "wavefit-envelope",
+        },
+    }
+    with open(cfg_path, "w", encoding="utf-8") as fp:
+        toml.dump(cfg, fp)
+
+    work_dir = work_root / run / dirname
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    x = np.linspace(0.0, 4.0, 5)
+    y = np.linspace(0.0, 3.0, 4)
+    B = np.zeros((1, y.size, x.size, 3), dtype=np.float64)
+    B[0, ..., 0] = 0.2
+    with h5py.File(work_dir / "wavefilter.h5", "w") as fp:
+        fp.create_dataset("step", data=np.array([10], dtype=np.int64))
+        fp.create_dataset("t", data=np.array([2.5], dtype=np.float64))
+        fp.create_dataset("x", data=x)
+        fp.create_dataset("y", data=y)
+        fp.create_dataset("B", data=B)
+
+    with h5py.File(work_dir / "wavefit.h5", "w") as fp:
+        grp = fp.create_group("snapshots/00000010")
+        grp.create_dataset("envelope", data=np.ones((y.size, x.size), dtype=np.float64) * 0.25)
+        grp.create_dataset("ix", data=np.array([1, 3], dtype=np.int64))
+        grp.create_dataset("iy", data=np.array([2, 1], dtype=np.int64))
+        grp.create_dataset("is_good", data=np.array([1, 0], dtype=np.int8))
+        grp.attrs["option_envelope_threshold"] = 0.1
+
+    obj = WaveFitAnalyzer(str(cfg_path), option_section="plot")
+    obj.options["debug"] = False
+    obj.main_plot()
+
+    out_png = work_dir / "wavefit-envelope-00000010.png"
+    assert out_png.exists()
+    assert out_png.stat().st_size > 0

@@ -2,11 +2,74 @@
 # -*- coding: utf-8 -*-
 import matplotlib as mpl
 import numpy as np
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 mpl.use("Agg") if __name__ == "__main__" else None
 import matplotlib.pyplot as plt
 
 from .model import rms_floor
+
+
+def save_envelope_map_plot(
+    filename,
+    envelope,
+    xx,
+    yy,
+    good_x,
+    good_y,
+    step,
+    time=None,
+    wci=None,
+    threshold=None,
+):
+    xx = np.asarray(xx)
+    yy = np.asarray(yy)
+    env = np.asarray(envelope)
+    gx = np.asarray(good_x)
+    gy = np.asarray(good_y)
+
+    xspan = float(xx.max() - xx.min())
+    yspan = float(yy.max() - yy.min())
+    data_ratio = yspan / max(xspan, 1.0e-12)
+    fig_width = 8.4
+    fig_height = float(np.clip(fig_width * data_ratio + 0.8, 4.2, 7.2))
+
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=140)
+    fig.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.95)
+    im = ax.imshow(
+        env,
+        origin="lower",
+        extent=[float(xx.min()), float(xx.max()), float(yy.min()), float(yy.max())],
+        aspect="equal",
+        cmap="viridis",
+    )
+
+    if gx.size > 0:
+        ax.scatter(
+            gx,
+            gy,
+            s=30,
+            c="red",
+            marker="x",
+            linewidths=1.1,
+            alpha=0.55,
+        )
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="3.0%", pad=0.06)
+    cb = fig.colorbar(im, cax=cax)
+    cb.set_label(r"$|B_w| / B_0$")
+    ax.set_xlabel(r"$x / c/\omega_{pe}$")
+    ax.set_ylabel(r"$y / c/\omega_{pe}$")
+
+    title = "step={:08d}".format(int(step))
+    if time is not None and wci is not None and np.isfinite(float(wci)):
+        title += r"  $\Omega_{{ci}} t$={:5.2f}".format(float(time) * float(wci))
+    if threshold is not None and np.isfinite(float(threshold)):
+        title += r"  $|B_w| / B_0 > {:.3f}$".format(float(threshold))
+    ax.set_title(title)
+    fig.savefig(filename)
+    plt.close(fig)
 
 
 def save_diagnostic_plot(filename, envelope, xx, yy, ix, iy, fit_result):
