@@ -48,6 +48,16 @@ pip install -e ".[mpi]"
 - If MPI toolchain is missing, keeps a serial-only setup (no failure)
 - Run once after cloning or pulling
 
+**MPI wavefit wrapper** (`scripts/mpi-wavefit.sh`):
+- Loads `.shock.env` (including `MPIEXEC` if set)
+- Launches `shock.wavefit` via MPI with a controlled rank count
+- Example:
+
+```bash
+scripts/mpi-wavefit.sh -n 4 -j analyze work/ma05-tbn80-run002/wavefit-config.toml
+scripts/mpi-wavefit.sh -n 4 -j analyze,plot --snapshot-index 10 --snapshot-index 11 work/ma05-tbn80-run002/wavefit-config.toml
+```
+
 ## Directory Structure Contract
 
 All analysis configs share these top-level keys:

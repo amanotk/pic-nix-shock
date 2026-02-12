@@ -149,3 +149,10 @@ fitted snapshot from `fitfile.h5` + `wavefile.h5`.
   and root writes results to HDF5.
 - `analyze --debug` remains serial by design.
 - `plot` remains serial (root rank only when launched under MPI).
+
+Preferred launcher wrapper:
+
+```bash
+scripts/mpi-wavefit.sh -n 4 -j analyze work/ma05-tbn80-run002/wavefit-config.toml
+scripts/mpi-wavefit.sh -n 4 -j analyze,plot --snapshot-index 10 --snapshot-index 11 work/ma05-tbn80-run002/wavefit-config.toml
+```
