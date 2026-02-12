@@ -74,7 +74,7 @@ If we assume that the window function is fixed (i.e., $x_0$, $y_0$, $\sigma$ are
 Current wavefit implementation evaluates goodness with two conditions:
 
 1. Balanced error criterion:
-   - `nrmse_balanced <= 0.4`
+   - `nrmse_balanced <= good_nrmse_bal_max` (default `0.4`; `0.7` is a common relaxed choice)
    - where
      ```math
      nrmse_{balanced} = \sqrt{\frac{1}{2}\left(nrmse_E^2 + nrmse_B^2\right)}
