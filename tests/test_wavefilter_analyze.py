@@ -1,5 +1,6 @@
 """Tests for wavefilter analyze output."""
 
+import pickle
 import sys
 import types
 
@@ -47,6 +48,9 @@ def test_wavefilter_analyze_writes_filtered_fields(temp_dir, monkeypatch):
     )
 
     with h5py.File(raw_path, "w") as fp:
+        config_obj = {"parameter": {"sigma": 0.01, "u0": 0.1}}
+        config = np.frombuffer(pickle.dumps(config_obj), dtype=np.int8)
+        fp.create_dataset("config", data=config, dtype=np.int8)
         fp.create_dataset("step", data=step)
         fp.create_dataset("t", data=t)
         fp.create_dataset("x", data=x)
@@ -81,6 +85,7 @@ def test_wavefilter_analyze_writes_filtered_fields(temp_dir, monkeypatch):
     out_path = analyzer.get_filename("wavefilter", ".h5")
 
     with h5py.File(out_path, "r") as fp:
+        assert "config" in fp
         assert fp["B"].shape == (nt, ny, nx, 3)
         assert fp["E"].shape == (nt, ny, nx, 3)
         assert np.all(np.isfinite(fp["B"][...]))

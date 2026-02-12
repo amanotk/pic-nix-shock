@@ -174,6 +174,95 @@ For `field`, normalization follows `wavetool.py`:
 
 Optional `field` color limits are `E_lim` and `B_lim`.
 
+## `wavefit.py`
+
+Example: `sample/wavefit-config.toml`
+
+`wavefit.py` reads filtered fields from `wavefilter` output and fits a
+localized circularly polarized plane-wave model to selected candidate points
+across selected snapshots.
+
+```toml
+run = "run1"
+dirname = "wavetool-field"
+profile = "data/profile.msgpack"
+overwrite = true
+
+[analyze]
+wavefile = "wavefilter"
+rawfile = "wavetool"
+fitfile = "wavefit"
+sigma = 4.0
+max_candidates = 32
+envelope_smooth_sigma = 0.5
+envelope_threshold = 0.10
+candidate_distance = 4.0
+fit_min_points = 64
+kx_init = 0.30
+kx_min = 0.10
+kx_max = 2.00
+ky_init = 0.00
+ky_abs_max = 1.00
+kx_init_scan = [0.1, 0.3, 0.6]
+ky_init_scan = [-0.8, -0.4, 0.0, 0.4, 0.8]
+good_nrmse_bal_max = 0.40
+good_lambda_factor_max = 4.0
+
+[plot]
+wavefile = "wavefilter"
+fitfile = "wavefit"
+```
+
+Notes:
+
+- AI quick reference (operational semantics):
+  - Non-debug run analyzes all snapshots in the input `wavefile`.
+  - Analyze runs snapshot-parallel under MPI automatically when launched with
+    multiple ranks (e.g., `mpiexec -n N ...`).
+  - MPI analyze uses `mpi4py.futures.MPICommExecutor` with root-only HDF5 writes.
+  - Debug analyze (`--debug`) always runs serially.
+  - `plot` remains serial (root rank only under MPI launch).
+  - `--debug` enables subset mode (`--debug-count`, `--debug-mode`, `--debug-index`).
+  - `plot` job reads existing `fitfile` snapshots and renders envelope maps.
+  - Debug quicklook controls are CLI-only (`--debug-plot`, `--no-debug-plot`,
+    `--debug-plot-count`, `--debug-plot-prefix`).
+  - Plot outputs are named as `<fitfile>-envelope-<index>.png`.
+  - `max_candidates` applies only in debug mode; non-debug candidate count is unbounded.
+  - `helicity` scan and multi-start are always enabled in current implementation.
+  - Use `good_nrmse_bal_max` and `good_lambda_factor_max` for quality gates.
+
+- `sigma` is the Gaussian-window width in physical `x`/`y` units.
+- Fit patch radius is fixed at `3 * sigma`.
+- Candidate detection threshold uses `|B_wave| / B0 >= envelope_threshold`
+  where `B0 = sqrt(sigma) / sqrt(1 + u0^2)` from embedded wavefile config
+  parameters (`sigma`, `u0`) when available, otherwise from run profile.
+- Local background context fields (`Bx/y/z`, `vex/y/z`, `vix/y/z`) are
+  computed from `rawfile` using the same Gaussian patch weighting.
+- Candidate de-dup uses absolute spacing in x/y units: `candidate_distance`.
+- `y` is treated as periodic in both candidate spacing and fitting window.
+- Data and model are both multiplied by the same Gaussian window before
+  residual evaluation.
+- `max_candidates` is applied only in `--debug` mode; non-debug runs process
+  all detected candidates.
+- Non-debug runs process all snapshots; debug subset selection is controlled by
+  CLI options.
+- Output is stored in `fitfile.h5` under `snapshots/<step>/...` with one row
+  per candidate fit and quality metrics (`nrmse`, `r2E`, `r2B`, `redchi`, etc.)
+  plus covariance-based 1-sigma parameter errors (`kx_err`, `ky_err`,
+  `Ew_err`, `Bw_err`, `phiE_err`, `phiB_err`) when available.
+- Optional diagnostic plots are controlled by CLI flags.
+
+Example debug commands:
+
+```bash
+python -m shock.wavefit -j analyze --debug sample/wavefit-config.toml
+python -m shock.wavefit -j analyze --debug --debug-count 4 sample/wavefit-config.toml
+python -m shock.wavefit -j analyze --debug --debug-index 0 --debug-index 16 sample/wavefit-config.toml
+python -m shock.wavefit -j analyze --debug --debug-plot-count 12 --debug-plot-prefix wavefit-quick sample/wavefit-config.toml
+python -m shock.wavefit -j plot sample/wavefit-config.toml
+python -m shock.wavefit -j plot --debug --debug-count 8 sample/wavefit-config.toml
+```
+
 ## Environment Variables
 
 - `SHOCK_DATA_ROOT` default: `./data`

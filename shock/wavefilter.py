@@ -133,6 +133,7 @@ class WaveFilterAnalyzer(base.JobExecutor):
             step = fp_in["step"][()]
             x = fp_in["x"][()]
             y = fp_in["y"][()]
+            config = fp_in["config"][()] if "config" in fp_in else None
             nstep = step.shape[0]
 
             fs = get_sampling_frequency(t)
@@ -153,6 +154,8 @@ class WaveFilterAnalyzer(base.JobExecutor):
                 y = y[debug_indices, ...]
 
             with h5py.File(wavefile, "w") as fp_out:
+                if config is not None:
+                    fp_out.create_dataset("config", data=config, dtype=np.int8)
                 fp_out.create_dataset("step", data=step)
                 fp_out.create_dataset("t", data=t)
                 fp_out.create_dataset("x", data=x)

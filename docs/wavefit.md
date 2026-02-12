@@ -69,3 +69,90 @@ If we assume that the window function is fixed (i.e., $x_0$, $y_0$, $\sigma$ are
 - The general localized wave model (14 parameters): $k_x$, $k_y$, $f_i (i=1,\ldots,6)$, $\phi_i (i=1,\ldots,6)$.
 - The circularly polarized wave model (6 parameters): $k_x$, $k_y$, $E_w$, $B_w$, $\phi_E$, $\phi_B$.
 
+## Goodness of Fit Criteria
+
+Current wavefit implementation evaluates goodness with two conditions:
+
+1. Balanced error criterion:
+   - `nrmse_balanced <= good_nrmse_bal_max` (default `0.4`; `0.7` is a common relaxed choice)
+   - where
+     ```math
+     nrmse_{balanced} = \sqrt{\frac{1}{2}\left(nrmse_E^2 + nrmse_B^2\right)}
+     ```
+     and
+     ```math
+     nrmse_E = \frac{\mathrm{rms}(E_{data}-E_{model})}{\mathrm{rms}(E_{data})},
+     \quad
+     nrmse_B = \frac{\mathrm{rms}(B_{data}-B_{model})}{\mathrm{rms}(B_{data})}
+     ```
+2. Scale-separation criterion:
+   - `lambda <= 4 * sigma`
+   - with
+     ```math
+     k = \sqrt{k_x^2 + k_y^2},
+     \quad
+     \lambda = \frac{2\pi}{k}
+     ```
+
+The fit is marked as good only when both conditions are satisfied.
+
+## Diagnostic Plot Function (Reusable)
+
+`shock/wavefit/plot.py` provides:
+
+- `save_quickcheck_plot_12panel(filename, fit_result, title=None, rms_normalize=True)`
+
+This creates a 2x6 panel diagnostic plot for one fitted candidate:
+
+- top row: data
+- bottom row: model
+- columns: `Ex, Ey, Ez, Bx, By, Bz`
+
+When `rms_normalize=True` (recommended), electric and magnetic components are
+normalized separately (`E/rmsE`, `B/rmsB`) to make visual comparison robust
+when `|E| << |B|`.
+
+### Minimal Usage
+
+```python
+from shock import wavefit
+
+# fit_result returned by wavefit.fit_one_candidate(...)
+wavefit.save_quickcheck_plot_12panel(
+    "quickcheck-example.png",
+    fit_result,
+    title="candidate quickcheck",
+    rms_normalize=True,
+)
+```
+
+## Interactive Tuning
+
+For iterative, human-in-the-loop fitting-quality sessions, use the generic
+playbook in `docs/wavefit-interactive-tuning.md`.
+
+## Envelope Map Plot Job
+
+`python -m shock.wavefit -j plot <config.toml>` renders one envelope map PNG per
+fitted snapshot from `fitfile.h5` + `wavefile.h5`.
+
+- Input snapshots come from `fitfile` (`snapshots/<step>`).
+- Overlay points include only candidates with `is_good=1`.
+- Output filename pattern: `<fitfile>-envelope-<index>.png`.
+- `--debug`, `--debug-count`, and `--debug-index` may be used to render a subset.
+
+## MPI Execution Notes
+
+- `analyze` automatically uses snapshot-level MPI parallelism when launched under
+  multi-rank MPI (`mpiexec -n N ...`).
+- In MPI mode, root uses `mpi4py.futures.MPICommExecutor`, workers fit snapshots,
+  and root writes results to HDF5.
+- `analyze --debug` remains serial by design.
+- `plot` remains serial (root rank only when launched under MPI).
+
+Preferred launcher wrapper:
+
+```bash
+scripts/mpi-wavefit.sh -n 4 -j analyze work/ma05-tbn80-run002/wavefit-config.toml
+scripts/mpi-wavefit.sh -n 4 -j analyze,plot --snapshot-index 10 --snapshot-index 11 work/ma05-tbn80-run002/wavefit-config.toml
+```

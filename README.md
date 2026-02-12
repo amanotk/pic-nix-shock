@@ -44,7 +44,19 @@ pip install -e ".[mpi]"
 - Creates the `work/` directory if it doesn't exist
 - Sets up `.shock.env` from example (if not already present)
 - Syncs the Python environment with `uv sync` (or pip fallback when `uv` is missing)
+- If MPI toolchain is available (`MPICC` + `MPIEXEC`), builds `mpi4py` with `MPICC`
+- If MPI toolchain is missing, keeps a serial-only setup (no failure)
 - Run once after cloning or pulling
+
+**MPI wavefit wrapper** (`scripts/mpi-wavefit.sh`):
+- Loads `.shock.env` (including `MPIEXEC` if set)
+- Launches `shock.wavefit` via MPI with a controlled rank count
+- Example:
+
+```bash
+scripts/mpi-wavefit.sh -n 4 -j analyze work/ma05-tbn80-run002/wavefit-config.toml
+scripts/mpi-wavefit.sh -n 4 -j analyze,plot --snapshot-index 10 --snapshot-index 11 work/ma05-tbn80-run002/wavefit-config.toml
+```
 
 ## Directory Structure Contract
 
@@ -86,6 +98,9 @@ Example `.shock.env`:
 ```bash
 SHOCK_DATA_ROOT=./data
 SHOCK_WORK_ROOT=./work
+# Optional on multi-MPI systems
+# MPICC=/path/to/mpicc
+# MPIEXEC=/path/to/mpiexec
 ```
 
 ## Batch Scheduler Usage
@@ -146,6 +161,29 @@ between different prefix runs.
 # sample config expects SHOCK_DATA_ROOT/run1/data/profile.msgpack
 python shock/wavefilter.py -j analyze,plot sample/wavefilter-config.toml
 ```
+
+### Fit localized wave model
+
+```bash
+python -m shock.wavefit -j analyze sample/wavefit-config.toml
+# debug subset examples
+python -m shock.wavefit -j analyze --debug --debug-count 4 sample/wavefit-config.toml
+python -m shock.wavefit -j analyze --debug --debug-index 0 --debug-index 8 sample/wavefit-config.toml
+```
+
+`wavefit.py` reads filtered `E` and `B` fields from `wavefilter` output,
+detects strong wave-envelope candidates, and performs local circularly
+polarized wave fitting with Gaussian windows. Non-debug runs analyze all
+snapshots in the input file; debug mode analyzes a subset.
+
+Quick behavior guide:
+
+- Normal run (`python -m shock.wavefit -j analyze ...`) processes all snapshots.
+- Debug run (`--debug`) processes a subset for fast iteration.
+- `--debug-count` and `--debug-mode` control subset sampling.
+- Repeat `--debug-index` to process exact snapshot indices in debug mode.
+- `max_candidates` in TOML applies only in debug mode (normal run is unbounded).
+- `sample/wavefit-config.toml` includes comments for the recommended defaults.
 
 ### Compute velocity distributions
 
