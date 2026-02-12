@@ -146,19 +146,29 @@ def save_quickcheck_plot_12panel(filename, fit_result, title=None, rms_normalize
         fig.colorbar(im1, ax=axs[1, j], shrink=0.65)
 
     if title is None:
+        kx = float(fit_result.get("kx", np.nan))
+        ky = float(fit_result.get("ky", np.nan))
+        k_mag = np.sqrt(kx**2 + ky**2)
+        wavelength = (2.0 * np.pi / k_mag) if np.isfinite(k_mag) and k_mag > 0.0 else np.nan
+        theta_deg = (
+            np.degrees(np.arctan2(ky, kx)) if np.isfinite(kx) and np.isfinite(ky) else np.nan
+        )
         title = (
             "nrmse_bal={:.3f} (E={:.3f}, B={:.3f})  "
-            "lambda/sigma={:.3f}  good=({:d},{:d})  "
-            "k=({:+.3f},{:+.3f}) h={:+.0f}"
+            "redchi={:.3e}  lambda/sigma={:.3f}  good=({:d},{:d})  "
+            "k=({:+.3f},{:+.3f}) lambda={:.2f} theta={:+.1f}deg h={:+.0f}"
         ).format(
             float(fit_result.get("nrmse_balanced", fit_result.get("nrmse", np.nan))),
             float(fit_result.get("nrmseE", np.nan)),
             float(fit_result.get("nrmseB", np.nan)),
+            float(fit_result.get("redchi", np.nan)),
             float(fit_result.get("wavelength_over_sigma", np.nan)),
             int(bool(fit_result.get("is_good_nrmse", False))),
             int(bool(fit_result.get("is_good_scale", False))),
             float(fit_result.get("kx", np.nan)),
             float(fit_result.get("ky", np.nan)),
+            wavelength,
+            theta_deg,
             float(fit_result.get("helicity", np.nan)),
         )
 

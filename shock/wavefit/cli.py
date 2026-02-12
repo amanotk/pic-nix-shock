@@ -6,6 +6,7 @@ import sys
 
 import h5py
 import numpy as np
+import scipy.ndimage as ndimage
 import tqdm
 
 if "PICNIX_DIR" in os.environ:
@@ -15,8 +16,8 @@ try:
 except ImportError:
     import base
 
-from .candidates import pick_candidate_points
 from .fit import fit_one_candidate
+from .model import periodic_delta
 from .plot import save_quickcheck_plot_12panel
 
 
@@ -24,11 +25,17 @@ RESULT_FLOAT_KEYS = [
     "x0",
     "y0",
     "kx",
+    "kx_err",
     "ky",
+    "ky_err",
     "Ew",
+    "Ew_err",
     "Bw",
+    "Bw_err",
     "phiE",
+    "phiE_err",
     "phiB",
+    "phiB_err",
     "redchi",
     "nrmse",
     "nrmse_balanced",
@@ -46,7 +53,7 @@ RESULT_FLOAT_KEYS = [
     "patch_ymax",
 ]
 RESULT_INT_KEYS = ["ix", "iy", "nfev"]
-RESULT_BOOL_KEYS = ["success", "is_good", "is_good_nrmse", "is_good_scale"]
+RESULT_BOOL_KEYS = ["success", "is_good", "is_good_nrmse", "is_good_scale", "has_errorbars"]
 RESULT_STR_KEYS = ["reason", "message"]
 LARGE_ARRAY_KEYS = [
     "windowed_data_E",
@@ -77,6 +84,66 @@ def select_debug_indices(size, debug=False, debug_count=8, debug_mode="uniform")
     raise ValueError("Unknown debug_mode: {:s}. Use 'head' or 'uniform'.".format(str(debug_mode)))
 
 
+def pick_candidate_points(xx, yy, envelope, sigma, options):
+    smooth_sigma = float(options.get("envelope_smooth_sigma", 0.5))
+    max_candidates_opt = options.get("max_candidates", None)
+    if max_candidates_opt is None:
+        max_candidates = None
+    else:
+        max_candidates = int(max_candidates_opt)
+        if max_candidates <= 0:
+            max_candidates = None
+    threshold = float(options.get("envelope_threshold", 0.10))
+    min_distance_sigma = float(options.get("candidate_min_distance_sigma", 1.0))
+
+    env = np.array(envelope, copy=True)
+    if smooth_sigma > 0.0:
+        env = ndimage.gaussian_filter1d(env, sigma=smooth_sigma, axis=0, mode="wrap")
+        env = ndimage.gaussian_filter1d(env, sigma=smooth_sigma, axis=1, mode="nearest")
+
+    ydy = np.median(np.diff(yy))
+    sy = 1
+    sx = 1
+    env_max = ndimage.maximum_filter1d(env, size=2 * sy + 1, axis=0, mode="wrap")
+    env_max = ndimage.maximum_filter1d(env_max, size=2 * sx + 1, axis=1, mode="nearest")
+    localmax = env == env_max
+    mask = localmax & (env >= threshold)
+
+    cand_iy, cand_ix = np.where(mask)
+    if cand_ix.size == 0:
+        return np.array([], dtype=np.int64), np.array([], dtype=np.int64), env
+
+    amp = env[cand_iy, cand_ix]
+    order = np.argsort(amp)[::-1]
+
+    Ly = (yy[-1] - yy[0]) + ydy
+    min_distance = min_distance_sigma * sigma
+    selected_ix = []
+    selected_iy = []
+
+    for idx in order:
+        ix = int(cand_ix[idx])
+        iy = int(cand_iy[idx])
+        x0 = xx[ix]
+        y0 = yy[iy]
+
+        keep = True
+        for jx, jy in zip(selected_ix, selected_iy):
+            dx = xx[jx] - x0
+            dy = periodic_delta(yy[jy], y0, Ly)
+            if np.sqrt(dx**2 + dy**2) < min_distance:
+                keep = False
+                break
+
+        if keep:
+            selected_ix.append(ix)
+            selected_iy.append(iy)
+        if max_candidates is not None and len(selected_ix) >= max_candidates:
+            break
+
+    return np.array(selected_ix, dtype=np.int64), np.array(selected_iy, dtype=np.int64), env
+
+
 class WaveFitAnalyzer(base.JobExecutor):
     def __init__(self, config_file):
         super().__init__(config_file)
@@ -85,7 +152,20 @@ class WaveFitAnalyzer(base.JobExecutor):
                 self.options[key] = self.options["analyze"][key]
 
     def read_parameter(self):
-        return None
+        return super().read_parameter()
+
+    def get_reference_b0(self):
+        if not isinstance(self.parameter, dict):
+            raise ValueError("profile parameter is required for B0 normalization")
+        if "sigma" not in self.parameter or "u0" not in self.parameter:
+            raise ValueError("profile parameter must contain sigma and u0 for B0 normalization")
+
+        sigma = float(self.parameter["sigma"])
+        u0 = float(self.parameter["u0"])
+        b0 = np.sqrt(sigma) / np.sqrt(1.0 + u0**2)
+        if b0 <= 0.0 or not np.isfinite(b0):
+            raise ValueError("computed B0 is invalid")
+        return float(b0)
 
     def fit_single_snapshot(self, E, B, xx, yy):
         fit_options = dict(self.options)
@@ -95,7 +175,8 @@ class WaveFitAnalyzer(base.JobExecutor):
             fit_options.pop("max_candidates", None)
 
         sigma = float(self.options.get("sigma", 3.0))
-        envelope = np.linalg.norm(B, axis=-1)
+        b0 = self.get_reference_b0()
+        envelope = np.linalg.norm(B, axis=-1) / b0
         cand_ix, cand_iy, env_used = pick_candidate_points(xx, yy, envelope, sigma, fit_options)
 
         fit_results = []
@@ -180,9 +261,17 @@ class WaveFitAnalyzer(base.JobExecutor):
             if "windowed_data_E" not in item:
                 continue
             filename = outdir / ("{:s}-{:08d}-{:03d}.png".format(output_prefix, int(step), int(i)))
+            kx = float(item.get("kx", np.nan))
+            ky = float(item.get("ky", np.nan))
+            k_mag = np.sqrt(kx**2 + ky**2)
+            wavelength = (2.0 * np.pi / k_mag) if np.isfinite(k_mag) and k_mag > 0.0 else np.nan
+            theta_deg = (
+                np.degrees(np.arctan2(ky, kx)) if np.isfinite(kx) and np.isfinite(ky) else np.nan
+            )
             title = (
                 "step={:08d} cand={:03d} ix={} iy={} nrmse_bal={:.3f} "
-                "(E={:.3f}, B={:.3f}) lambda/sigma={:.3f} good=({:d},{:d})"
+                "(E={:.3f}, B={:.3f}) redchi={:.3e} lambda/sigma={:.3f} "
+                "lambda={:.2f} theta={:+.1f}deg good=({:d},{:d})"
             ).format(
                 int(step),
                 int(i),
@@ -191,7 +280,10 @@ class WaveFitAnalyzer(base.JobExecutor):
                 float(item.get("nrmse_balanced", item.get("nrmse", np.nan))),
                 float(item.get("nrmseE", np.nan)),
                 float(item.get("nrmseB", np.nan)),
+                float(item.get("redchi", np.nan)),
                 float(item.get("wavelength_over_sigma", np.nan)),
+                wavelength,
+                theta_deg,
                 int(bool(item.get("is_good_nrmse", False))),
                 int(bool(item.get("is_good_scale", False))),
             )

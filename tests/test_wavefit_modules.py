@@ -33,7 +33,7 @@ def test_wavefit_model_evaluate_quality_threshold_logic():
 
 
 def test_wavefit_candidates_pick_points_respects_spacing():
-    from shock.wavefit.candidates import pick_candidate_points
+    from shock.wavefit.cli import pick_candidate_points
 
     xx = np.linspace(0.0, 20.0, 41)
     yy = np.linspace(0.0, 10.0, 21)
@@ -43,7 +43,7 @@ def test_wavefit_candidates_pick_points_respects_spacing():
 
     options = {
         "max_candidates": 8,
-        "envelope_threshold_fraction": 0.1,
+        "envelope_threshold": 0.1,
         "candidate_min_distance_sigma": 1.5,
         "envelope_smooth_sigma": 0.0,
     }
@@ -55,7 +55,7 @@ def test_wavefit_candidates_pick_points_respects_spacing():
 
 
 def test_wavefit_candidates_no_limit_when_max_candidates_not_set():
-    from shock.wavefit.candidates import pick_candidate_points
+    from shock.wavefit.cli import pick_candidate_points
 
     xx = np.linspace(0.0, 30.0, 61)
     yy = np.linspace(0.0, 15.0, 31)
@@ -65,7 +65,7 @@ def test_wavefit_candidates_no_limit_when_max_candidates_not_set():
     env[15, 30] = 7.0
 
     options = {
-        "envelope_threshold_fraction": 0.1,
+        "envelope_threshold": 0.1,
         "candidate_min_distance_sigma": 1.0,
         "envelope_smooth_sigma": 0.0,
     }
@@ -204,6 +204,9 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
     assert result["nrmse_balanced"] < 0.4
     assert result["is_good_nrmse"]
     assert result["is_good_scale"]
+    for key in ["kx_err", "ky_err", "Ew_err", "Bw_err", "phiE_err", "phiB_err"]:
+        assert key in result
+    assert "has_errorbars" in result
 
 
 def test_wavefit_cli_select_debug_indices_modes():

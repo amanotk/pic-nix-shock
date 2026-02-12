@@ -194,7 +194,7 @@ fitfile = "wavefit"
 sigma = 4.0
 max_candidates = 32
 envelope_smooth_sigma = 0.5
-envelope_threshold_fraction = 0.50
+envelope_threshold = 0.10
 candidate_min_distance_sigma = 1.0
 patch_radius_sigma = 3.0
 kx_init = 0.30
@@ -221,6 +221,8 @@ Notes:
   - Use `good_nrmse_bal_max` and `good_lambda_factor_max` for quality gates.
 
 - `sigma` is the Gaussian-window width in physical `x`/`y` units.
+- Candidate detection threshold uses `|B_wave| / B0 >= envelope_threshold`
+  where `B0 = sqrt(sigma) / sqrt(1 + u0^2)` from run profile parameters.
 - `y` is treated as periodic in both candidate spacing and fitting window.
 - Data and model are both multiplied by the same Gaussian window before
   residual evaluation.
@@ -229,7 +231,9 @@ Notes:
 - Non-debug runs process all snapshots; debug subset selection is controlled by
   CLI options.
 - Output is stored in `fitfile.h5` under `snapshots/<step>/...` with one row
-  per candidate fit and quality metrics (`nrmse`, `r2E`, `r2B`, `redchi`, etc.).
+  per candidate fit and quality metrics (`nrmse`, `r2E`, `r2B`, `redchi`, etc.)
+  plus covariance-based 1-sigma parameter errors (`kx_err`, `ky_err`,
+  `Ew_err`, `Bw_err`, `phiE_err`, `phiB_err`) when available.
 - Optional diagnostic plots are saved with prefix `debug_plot_prefix`.
 
 Example debug commands:

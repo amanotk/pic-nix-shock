@@ -9,16 +9,27 @@ except ImportError as exc:
         "wavefit requires lmfit. Install project dependencies first (e.g., uv sync)."
     ) from exc
 
-from .candidates import build_patch_masks
 from .model import (
     build_window,
     build_xy,
     calc_r2,
     circular_model_cartesian,
     evaluate_fit_quality,
+    periodic_delta,
     rms_floor,
     wrap_to_pi,
 )
+
+
+def build_patch_masks(xx, yy, x0, y0, sigma, options):
+    patch_radius_sigma = float(options.get("patch_radius_sigma", 3.0))
+    radius = patch_radius_sigma * sigma
+    dx = xx - x0
+    Ly = (yy[-1] - yy[0]) + np.median(np.diff(yy))
+    dy = periodic_delta(yy, y0, Ly)
+    xmask = np.abs(dx) <= radius
+    ymask = np.abs(dy) <= radius
+    return xmask, ymask, Ly
 
 
 def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
@@ -139,6 +150,23 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
 
     result = best
     p = result.params
+
+    def get_stderr(name):
+        value = p[name].stderr
+        if value is None:
+            return np.nan
+        value = float(value)
+        if not np.isfinite(value):
+            return np.nan
+        return value
+
+    kx_err = get_stderr("kx")
+    ky_err = get_stderr("ky")
+    Ew_err = get_stderr("Ew")
+    Bw_err = get_stderr("Bw")
+    phiE_err = get_stderr("phiE")
+    phiB_err = get_stderr("phiB")
+    has_errorbars = bool(getattr(result, "errorbars", False))
     Em, Bm, _ = circular_model_cartesian(
         Xp,
         Yp,
@@ -187,11 +215,17 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
         "x0": float(x0),
         "y0": float(y0),
         "kx": float(p["kx"].value),
+        "kx_err": float(kx_err),
         "ky": float(p["ky"].value),
+        "ky_err": float(ky_err),
         "Ew": float(p["Ew"].value),
+        "Ew_err": float(Ew_err),
         "Bw": float(p["Bw"].value),
+        "Bw_err": float(Bw_err),
         "phiE": float(wrap_to_pi(p["phiE"].value)),
+        "phiE_err": float(phiE_err),
         "phiB": float(wrap_to_pi(p["phiB"].value)),
+        "phiB_err": float(phiB_err),
         "helicity": float(best_helicity),
         "nfev": int(result.nfev),
         "redchi": float(result.redchi) if np.isfinite(result.redchi) else np.nan,
@@ -208,6 +242,7 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options):
         "r2E": float(r2e),
         "r2B": float(r2b),
         "is_good": bool(reason == "ok" and quality["is_good_overall"]),
+        "has_errorbars": has_errorbars,
         "patch_xmin": float(xxp.min()),
         "patch_xmax": float(xxp.max()),
         "patch_ymin": float(yyp.min()),

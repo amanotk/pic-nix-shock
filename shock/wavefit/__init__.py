@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from .candidates import build_patch_masks, pick_candidate_points
-from .cli import WaveFitAnalyzer, main
-from .fit import fit_one_candidate
+from .cli import WaveFitAnalyzer, main, pick_candidate_points
+from .fit import build_patch_masks, fit_one_candidate
 from .model import (
     build_window,
     build_xy,
