@@ -466,3 +466,28 @@ def test_wavefit_omega_sign_with_helicity(temp_dir):
 
     results2 = read_wavefit_results(str(h5_path2))
     assert results2["omega"][0] < 0
+
+
+def test_wavefit_io_helicity_fallback_when_not_stored(temp_dir):
+    import h5py
+
+    from shock.wavefit.io import read_wavefit_results
+
+    h5_path = temp_dir / "wavefit-no-helicity.h5"
+    with h5py.File(h5_path, "w") as fp:
+        grp = fp.create_group("snapshots/00000010")
+        grp.attrs["step"] = 10
+        grp.attrs["t"] = 2.5
+        grp.create_dataset("kx", data=np.array([0.1]))
+        grp.create_dataset("ky", data=np.array([0.8]))
+        grp.create_dataset("Ew", data=np.array([0.2]))
+        grp.create_dataset("Bw", data=np.array([0.3]))
+        grp.create_dataset("phiE", data=np.array([np.pi / 2]))
+        grp.create_dataset("phiB", data=np.array([0.0]))
+        # Note: helicity NOT stored - should be computed from phiE/phiB
+
+    results = read_wavefit_results(str(h5_path))
+
+    assert "helicity" in results
+    assert results["helicity"][0] == 1.0
+    assert results["omega"][0] > 0

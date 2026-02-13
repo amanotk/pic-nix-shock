@@ -50,6 +50,7 @@ RESULT_FLOAT_KEYS = [
     "nrmseE",
     "nrmseB",
     "nrmse_raw",
+    "helicity",
     "k",
     "wavelength",
     "wavelength_over_sigma",

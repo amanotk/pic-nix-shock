@@ -142,6 +142,16 @@ def read_wavefit_results(fitfile, good_only=False):
             else:
                 result[key] = np.array([])
 
+    # Fallback: compute helicity from phiE/phiB if not stored in file
+    if "helicity" in result and np.all(np.isnan(result["helicity"])):
+        if all(k in result for k in ["phiE", "phiB"]):
+            result["helicity"] = get_helicity_from_fit(
+                result.get("Ew", np.nan),
+                result["phiE"],
+                result.get("Bw", np.nan),
+                result["phiB"],
+            )
+
     # Compute omega (wave frequency)
     # |omega| = |k| * c * Ew/Bw (in normalized units c=1)
     # Sign: (phiE - phiB) * helicity = +pi/2 -> omega positive
