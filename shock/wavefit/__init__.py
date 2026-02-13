@@ -3,6 +3,7 @@
 
 from .cli import WaveFitAnalyzer, main, pick_candidate_points
 from .fit import build_patch_masks, fit_one_candidate
+from .io import get_helicity_from_fit, read_wavefit_results
 from .model import (
     build_window,
     build_xy,
@@ -21,6 +22,8 @@ __all__ = [
     "fit_one_candidate",
     "pick_candidate_points",
     "build_patch_masks",
+    "read_wavefit_results",
+    "get_helicity_from_fit",
     "wrap_to_pi",
     "periodic_delta",
     "build_xy",
