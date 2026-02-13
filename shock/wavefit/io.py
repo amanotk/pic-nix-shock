@@ -44,6 +44,7 @@ def read_wavefit_results(fitfile, good_only=False):
         - 'Ne', 'Ni': electron and ion density (arrays)
         - 'wc': absolute electron cyclotron frequency (|B| in normalized units)
         - 'wp': electron plasma frequency (sqrt(Ne) from fit data)
+        - 'omega': wave frequency (signed, |k|*c*Ew/Bw with sign from phiE-phiB)
     """
     float_keys = [
         "x0",
@@ -155,6 +156,30 @@ def read_wavefit_results(fitfile, good_only=False):
         # Handle NaN
         mask = np.isnan(result["phiE"]) | np.isnan(result["phiB"])
         result["helicity"][mask] = np.nan
+
+    # Compute omega (wave frequency)
+    # |omega| = |k| * c * Ew/Bw (in normalized units c=1)
+    # Sign: positive if phiE - phiB ~ +pi/2, negative if ~ -pi/2
+    if all(k in result for k in ["kx", "ky", "Ew", "Bw"]):
+        k_mag = np.sqrt(result["kx"] ** 2 + result["ky"] ** 2)
+        omega_abs = k_mag * result["Ew"] / (result["Bw"] + 1e-32)
+        # Wrap phiE - phiB to [-pi, pi]
+        if all(k in result for k in ["phiE", "phiB"]):
+            phi_diff = result["phiE"] - result["phiB"]
+            phi_diff = np.mod(phi_diff + np.pi, 2.0 * np.pi) - np.pi
+            # Positive if phi_diff > 0 (phiE leads phiB by ~+pi/2)
+            # Negative if phi_diff < 0 (phiE lags phiB by ~-pi/2)
+            result["omega"] = np.where(phi_diff >= 0, omega_abs, -omega_abs)
+            # Handle NaN
+            mask = (
+                np.isnan(result["phiE"])
+                | np.isnan(result["phiB"])
+                | np.isnan(result["Ew"])
+                | np.isnan(result["Bw"])
+            )
+            result["omega"][mask] = np.nan
+        else:
+            result["omega"] = np.abs(omega_abs)
 
     # Compute wc (electron cyclotron frequency) and wp (electron plasma frequency)
     # In normalized simulation units: wc = |B|, wp = sqrt(Ne)
