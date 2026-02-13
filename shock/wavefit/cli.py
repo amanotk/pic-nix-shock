@@ -62,12 +62,14 @@ RESULT_FLOAT_KEYS = [
     "Bx",
     "By",
     "Bz",
-    "vex",
-    "vey",
-    "vez",
-    "vix",
-    "viy",
-    "viz",
+    "Vex",
+    "Vey",
+    "Vez",
+    "Vix",
+    "Viy",
+    "Viz",
+    "Ne",
+    "Ni",
 ]
 RESULT_INT_KEYS = ["ix", "iy", "nfev"]
 RESULT_BOOL_KEYS = ["success", "is_good", "is_good_nrmse", "is_good_scale", "has_errorbars"]
@@ -124,7 +126,23 @@ def get_h5_group(fileobj, key):
 
 
 def get_mpi_size_rank():
+    # If mpi4py failed to import but we're running under mpiexec,
+    # try to get size from environment variable
     if MPI is None:
+        # Check for OpenMPI or other MPI implementations
+        size_env = os.environ.get("OMPI_COMM_WORLD_SIZE") or os.environ.get("PMI_SIZE")
+        if size_env:
+            try:
+                size = int(size_env)
+                rank_env = (
+                    os.environ.get("OMPI_COMM_WORLD_RANK")
+                    or os.environ.get("PMI_RANK")
+                    or os.environ.get("SLURM_PROCID", "0")
+                )
+                rank = int(rank_env)
+                return size, rank
+            except ValueError:
+                pass
         return 1, 0
     return MPI.COMM_WORLD.Get_size(), MPI.COMM_WORLD.Get_rank()
 
@@ -988,7 +1006,8 @@ def main():
     mpi_size, mpi_rank = get_mpi_size_rank()
     for job in jobs:
         if job == "analyze":
-            if mpi_rank == 0:
+            # Only print from non-MPI or root rank
+            if mpi_size == 1 or mpi_rank == 0:
                 print("[wavefit] running analyze", flush=True)
             obj = WaveFitAnalyzer(config)
             apply_runtime_options(obj)

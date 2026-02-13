@@ -106,6 +106,17 @@ else
     exit 1
 fi
 
+# Set LD_LIBRARY_PATH so mpi4py can find libmpi at runtime
+# Use mpicc --showme:link to robustly find the MPI library path
+MPICC_BIN=""
+if MPICC_BIN="$(resolve_binary "${MPICC:-}" mpicc)"; then
+    # Extract -L<path> from mpicc --showme:link output
+    MPI_LIB_PATH="$($MPICC_BIN --showme:link 2>/dev/null | grep -oP -- '-L\K[^ ]+' | head -1)"
+    if [ -n "$MPI_LIB_PATH" ] && [ -d "$MPI_LIB_PATH" ]; then
+        export LD_LIBRARY_PATH="$MPI_LIB_PATH:$LD_LIBRARY_PATH"
+    fi
+fi
+
 CMD=("$MPIEXEC_BIN" -n "$NPROC" uv run python -m shock.wavefit "$@")
 
 if [ "$DRY_RUN" -eq 1 ]; then

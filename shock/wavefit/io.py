@@ -36,11 +36,14 @@ def read_wavefit_results(fitfile, good_only=False):
         - 'phiE_err', 'phiB_err': phase errors (arrays)
         - 'nrmse', 'nrmse_balanced': fitting quality metrics (arrays)
         - 'is_good': good fit flag (array)
-        - 'is_good_nrmse', 'is_good_scale': individual quality criteria (arrays)
-        - 'k': total wavenumber (array)
-        - 'wavelength': wavelength (array)
         - 'x0', 'y0': fit centers (arrays)
         - 'helicity': helicity (+1 or -1), derived from phiE and phiB
+        - 'Bx', 'By', 'Bz': background magnetic field (arrays)
+        - 'Vex', 'Vey', 'Vez': background electron velocity (arrays)
+        - 'Vix', 'Viy', 'Viz': background ion velocity (arrays)
+        - 'Ne', 'Ni': electron and ion density (arrays)
+        - 'wc': absolute electron cyclotron frequency (|B| in normalized units)
+        - 'wp': electron plasma frequency (sqrt(Ne) from fit data)
     """
     float_keys = [
         "x0",
@@ -62,15 +65,22 @@ def read_wavefit_results(fitfile, good_only=False):
         "nrmse_balanced",
         "nrmseE",
         "nrmseB",
-        "k",
-        "wavelength",
-        "wavelength_over_sigma",
-        "r2E",
-        "r2B",
+        # Background fields and velocities
+        "Bx",
+        "By",
+        "Bz",
+        "Vex",
+        "Vey",
+        "Vez",
+        "Vix",
+        "Viy",
+        "Viz",
+        "Ne",
+        "Ni",
     ]
 
     int_keys = ["ix", "iy"]
-    bool_keys = ["success", "is_good", "is_good_nrmse", "is_good_scale", "has_errorbars"]
+    bool_keys = ["is_good"]
 
     result = {}
 
@@ -80,8 +90,8 @@ def read_wavefit_results(fitfile, good_only=False):
 
         snapshots = fp["snapshots"]
 
-        # Collect all steps
-        all_steps = sorted(int(step) for step in snapshots.keys())
+        # Collect all steps (keep as strings for h5py access)
+        all_steps = sorted(step for step in snapshots.keys())
 
         # Initialize lists for each key
         data = {key: [] for key in float_keys + int_keys + bool_keys}
@@ -140,10 +150,24 @@ def read_wavefit_results(fitfile, good_only=False):
         phi_diff = np.mod(phi_diff + np.pi, 2.0 * np.pi) - np.pi
         # helicity = +1 if phase diff is -pi/2 (model: sin leads cos)
         # helicity = -1 if phase diff is +pi/2 (model: sin lags cos)
-        result["helicity"] = np.where(phi_diff < 0, 1, -1)
+        # Use float type to allow NaN
+        result["helicity"] = np.where(phi_diff < 0, 1.0, -1.0)
         # Handle NaN
         mask = np.isnan(result["phiE"]) | np.isnan(result["phiB"])
         result["helicity"][mask] = np.nan
+
+    # Compute wc (electron cyclotron frequency) and wp (electron plasma frequency)
+    # In normalized simulation units: wc = |B|, wp = sqrt(Ne)
+    # wc = |qe| * B / (me * cc) = |B| (since qe=-1, me=1, cc=1)
+    if all(k in result for k in ["Bx", "By", "Bz"]):
+        B_mag = np.sqrt(result["Bx"] ** 2 + result["By"] ** 2 + result["Bz"] ** 2)
+        result["wc"] = np.abs(B_mag)
+        # wp = sqrt(Ne) - compute from Ne in fit results if available
+        if "Ne" in result:
+            ne_data = result["Ne"]
+            result["wp"] = np.sqrt(ne_data)
+        else:
+            result["wp"] = np.full_like(B_mag, np.nan)
 
     # Filter good fits if requested
     if good_only and "is_good" in result:
