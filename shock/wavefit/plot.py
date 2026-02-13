@@ -52,24 +52,24 @@ def save_envelope_map_plot(
         ax.scatter(
             gx,
             gy,
-            s=30,
-            c="red",
+            s=15,
+            color="white",
             marker="o",
             linewidths=0.8,
-            edgecolors="red",
+            edgecolors="white",
             facecolors="none",
-            alpha=0.55,
+            alpha=0.8,
         )
 
     if bx.size > 0:
         ax.scatter(
             bx,
             by,
-            s=30,
-            c="red",
+            s=15,
+            color="white",
             marker="x",
             linewidths=1.1,
-            alpha=0.55,
+            alpha=0.8,
         )
 
     divider = make_axes_locatable(ax)
