@@ -37,13 +37,13 @@ def read_wavefit_results(fitfile, good_only=False):
         - 'nrmse', 'nrmse_balanced': fitting quality metrics (arrays)
         - 'is_good': good fit flag (array)
         - 'x0', 'y0': fit centers (arrays)
-        - 'helicity': helicity (+1 or -1), derived from phiE and phiB
+        - 'helicity': helicity (+1 or -1), stored from fit results
         - 'Bx', 'By', 'Bz': background magnetic field (arrays)
         - 'Vex', 'Vey', 'Vez': background electron velocity (arrays)
         - 'Vix', 'Viy', 'Viz': background ion velocity (arrays)
-        - 'Ne', 'Ni': electron and ion density (arrays)
+        - 'Ne', 'Ni': electron and ion number density (arrays, converted from charge density)
         - 'wc': absolute electron cyclotron frequency (|B| in normalized units)
-        - 'wp': electron plasma frequency (sqrt(Ne) from fit data)
+        - 'wp': electron plasma frequency (sqrt(Ne) from fit data, where Ne is number density)
         - 'omega': wave frequency (signed, |k|*c*Ew/Bw with sign from phiE-phiB)
     """
     float_keys = [
@@ -66,6 +66,7 @@ def read_wavefit_results(fitfile, good_only=False):
         "nrmse_balanced",
         "nrmseE",
         "nrmseB",
+        "helicity",
         # Background fields and velocities
         "Bx",
         "By",
@@ -140,22 +141,6 @@ def read_wavefit_results(fitfile, good_only=False):
                 result[key] = np.concatenate(data[key])
             else:
                 result[key] = np.array([])
-
-    # Compute helicity from phase difference
-    # helicity = sign(phiB - phiE) since model uses sin for both
-    # but with E2 = h * Ew * sin, B2 = h * Bw * sin
-    # The phase relationship determines handedness
-    if "phiE" in result and "phiB" in result:
-        phi_diff = result["phiB"] - result["phiE"]
-        # Normalize to [-pi, pi]
-        phi_diff = np.mod(phi_diff + np.pi, 2.0 * np.pi) - np.pi
-        # helicity = +1 if phase diff is -pi/2 (model: sin leads cos)
-        # helicity = -1 if phase diff is +pi/2 (model: sin lags cos)
-        # Use float type to allow NaN
-        result["helicity"] = np.where(phi_diff < 0, 1.0, -1.0)
-        # Handle NaN
-        mask = np.isnan(result["phiE"]) | np.isnan(result["phiB"])
-        result["helicity"][mask] = np.nan
 
     # Compute omega (wave frequency)
     # |omega| = |k| * c * Ew/Bw (in normalized units c=1)

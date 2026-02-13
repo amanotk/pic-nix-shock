@@ -90,6 +90,24 @@ def decode_embedded_config(config_dataset_value):
     return pickle.loads(payload)
 
 
+def get_charges_from_parameter(parameter):
+    """Compute electron and ion charges from parameter dict.
+
+    In normalized simulation units:
+        gamma = sqrt(1 + u0^2)   (cc = 1)
+        me = 1 / nppc
+        qe = -wp / nppc * sqrt(gamma)   (electron charge, negative)
+        qi = -qe   (ion charge, positive)
+    """
+    nppc = parameter.get("nppc", 1)
+    wp = parameter.get("wp", 1.0)
+    u0 = parameter.get("u0", 0.0)
+    gamma = np.sqrt(1.0 + u0**2)
+    qe = -wp / nppc * np.sqrt(gamma)
+    qi = -qe
+    return qe, qi
+
+
 def extract_parameter_from_wavefile(fileobj):
     if "config" not in fileobj:
         return None
@@ -160,7 +178,9 @@ def format_progress_line(completed, total):
     return "{}/{} ({:5.1f}%) remaining={}".format(completed, total, percent, remaining)
 
 
-def fit_single_snapshot_worker(E, B, xx, yy, b0, options, B_background=None, J_background=None):
+def fit_single_snapshot_worker(
+    E, B, xx, yy, b0, options, B_background=None, J_background=None, qe=None, qi=None
+):
     fit_options = dict(options)
     if bool(options.get("debug", False)):
         fit_options.setdefault("max_candidates", 32)
@@ -186,6 +206,8 @@ def fit_single_snapshot_worker(E, B, xx, yy, b0, options, B_background=None, J_b
             fit_options,
             B_background=B_background,
             J_background=J_background,
+            qe=qe,
+            qi=qi,
         )
         fit_result["ix"] = int(ix)
         fit_result["iy"] = int(iy)
@@ -213,8 +235,17 @@ def analyze_snapshot_worker(task):
     raw_index = task.get("raw_index", None)
     b0 = float(task["b0"])
     options = dict(task["options"])
+    parameter = task.get("parameter", None)
+
+    qe, qi = None, None
+    if parameter is not None:
+        qe, qi = get_charges_from_parameter(parameter)
 
     with h5py.File(wavefile, "r") as fp_wave:
+        if parameter is None:
+            parameter = extract_parameter_from_wavefile(fp_wave)
+            if parameter is not None:
+                qe, qi = get_charges_from_parameter(parameter)
         wave_step_ds = get_h5_dataset(fp_wave, "step")
         wave_t_ds = get_h5_dataset(fp_wave, "t")
         wave_x_ds = get_h5_dataset(fp_wave, "x")
@@ -252,6 +283,8 @@ def analyze_snapshot_worker(task):
         options,
         B_background=B_background,
         J_background=J_background,
+        qe=qe,
+        qi=qi,
     )
     cleanup_large_arrays_in_result(result)
     return {
@@ -430,7 +463,9 @@ class WaveFitAnalyzer(base.JobExecutor):
             raise ValueError("No snapshots selected. Adjust debug settings.")
         return snapshot_indices
 
-    def fit_single_snapshot(self, E, B, xx, yy, b0, B_background=None, J_background=None):
+    def fit_single_snapshot(
+        self, E, B, xx, yy, b0, B_background=None, J_background=None, qe=None, qi=None
+    ):
         fit_options = dict(self.options)
         if bool(self.options.get("debug", False)):
             fit_options.setdefault("max_candidates", 32)
@@ -456,6 +491,8 @@ class WaveFitAnalyzer(base.JobExecutor):
                 fit_options,
                 B_background=B_background,
                 J_background=J_background,
+                qe=qe,
+                qi=qi,
             )
             fit_result["ix"] = int(ix)
             fit_result["iy"] = int(iy)
@@ -616,6 +653,10 @@ class WaveFitAnalyzer(base.JobExecutor):
                 b0 = self.get_reference_b0(parameter)
                 wci = self.get_wci(parameter)
 
+                qe, qi = None, None
+                if parameter is not None:
+                    qe, qi = get_charges_from_parameter(parameter)
+
                 rawfile_opt = self.options.get("rawfile", "wavetool")
                 rawfile = self.get_filename(rawfile_opt, ".h5") if rawfile_opt else None
                 step_to_raw_index = {}
@@ -670,6 +711,8 @@ class WaveFitAnalyzer(base.JobExecutor):
                         b0,
                         B_background=B_background,
                         J_background=J_background,
+                        qe=qe,
+                        qi=qi,
                     )
                     if debug:
                         self.generate_diagnostics(result, x, y, step, time=time, wci=wci)
@@ -732,6 +775,7 @@ class WaveFitAnalyzer(base.JobExecutor):
                             "raw_index": step_to_raw_index.get(step, None),
                             "b0": b0,
                             "options": dict(self.options),
+                            "parameter": parameter,
                         }
                     )
 

@@ -73,7 +73,7 @@ def weighted_local_mean_scalar(field_patch, weight_patch):
     return float(np.sum(field_patch * weight_patch) / wsum)
 
 
-def weighted_local_mean_velocity(current_patch, weight_patch):
+def weighted_local_mean_velocity(current_patch, weight_patch, species_charge):
     if current_patch is None or current_patch.shape[-1] < 4:
         return np.nan, np.nan, np.nan, np.nan
     density = current_patch[..., 0]
@@ -81,10 +81,13 @@ def weighted_local_mean_velocity(current_patch, weight_patch):
     velocity = current / (density[..., np.newaxis] + 1.0e-32)
     mean_vel = weighted_local_mean_vector(velocity, weight_patch)
     mean_density = weighted_local_mean_scalar(density, weight_patch)
+    mean_density = mean_density / species_charge
     return (*mean_vel, mean_density)
 
 
-def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options, B_background=None, J_background=None):
+def fit_one_candidate(
+    E, B, xx, yy, x0, y0, sigma, options, B_background=None, J_background=None, qe=None, qi=None
+):
     x_idx, y_idx, xxp, yyp, Ly = build_patch_coordinates(xx, yy, x0, y0, sigma, options)
     min_points = int(options.get("fit_min_points", 64))
 
@@ -118,8 +121,8 @@ def fit_one_candidate(E, B, xx, yy, x0, y0, sigma, options, B_background=None, J
             Ji_patch = J_background[np.ix_(y_idx, x_idx, np.arange(4, 8))]
 
     Bx, By, Bz = weighted_local_mean_vector(Braw_patch, Wpatch)
-    vex, vey, vez, Ne = weighted_local_mean_velocity(Je_patch, Wpatch)
-    vix, viy, viz, Ni = weighted_local_mean_velocity(Ji_patch, Wpatch)
+    vex, vey, vez, Ne = weighted_local_mean_velocity(Je_patch, Wpatch, qe)
+    vix, viy, viz, Ni = weighted_local_mean_velocity(Ji_patch, Wpatch, qi)
 
     rms_e = rms_floor(Ew_data)
     rms_b = rms_floor(Bw_data)
