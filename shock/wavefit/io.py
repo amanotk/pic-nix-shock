@@ -5,10 +5,127 @@ I/O functions for wavefit results.
 
 This module provides functions to read and parse HDF5 files produced by the
 wavefit analysis.
+
+Units and Conventions
+---------------------
+All quantities are in normalized simulation units where:
+- B, E: normalized by b0 (reference magnetic field)
+- n_e, n_i: number densities (NOT charge densities)
+- wp = sqrt(Ne / nppc), normalized so wp = 1 when Ne = nppc
+- wc = |B| (electron cyclotron frequency)
+- omega = |k| * c * Ew/Bw with sign from (phiE - phiB) * helicity
+  - positive when (phiE - phiB) * helicity > 0
+  - negative when (phiE - phiB) * helicity < 0
+- helicity: +1 or -1 from fit (handedness of wave polarization)
+
+Physical relationships:
+- wp^2 = ne * qe^2 / me
+- wc = |qe| * B / me
+- In normalized units: me = 1/npc, qe = -wp_config/nppc*sqrt(gamma)
+- For simplicity: wp = sqrt(Ne / nppc) when Ne = nppc → wp = 1
 """
+
+import os
+import pickle
 
 import h5py
 import numpy as np
+
+
+def extract_parameter_from_fitfile(fitfile):
+    """
+    Extract parameter dict from embedded config in wavefile referenced by fitfile.
+
+    Parameters
+    ----------
+    fitfile : str
+        Path to the wavefit HDF5 output file.
+
+    Returns
+    -------
+    dict or None
+        Parameter dict if found, None otherwise.
+    """
+    with h5py.File(fitfile, "r") as fp:
+        if "snapshots" not in fp:
+            return None
+
+        snapshots = fp["snapshots"]
+        if len(snapshots) == 0:
+            return None
+
+        # Get wavefile path from first snapshot's options
+        first_step = sorted(snapshots.keys())[0]
+        grp = snapshots[first_step]
+        wavefile = grp.attrs.get("option_wavefile", None)
+        dirname = grp.attrs.get("option_dirname", None)
+
+        if wavefile is None or dirname is None:
+            return None
+
+        # Construct wavefile path (same directory as fitfile)
+        fitfile_dir = os.path.dirname(fitfile)
+        wavefile_path = os.path.join(fitfile_dir, f"{wavefile}.h5")
+
+        if not os.path.exists(wavefile_path):
+            return None
+
+        # Extract parameter from wavefile
+        return extract_parameter_from_wavefile_path(wavefile_path)
+
+
+def extract_parameter_from_wavefile_path(wavefile_path):
+    """
+    Extract parameter dict from embedded config in wavefile.
+
+    Parameters
+    ----------
+    wavefile_path : str
+        Path to the wavefile HDF5 file.
+
+    Returns
+    -------
+    dict or None
+        Parameter dict if found, None otherwise.
+    """
+    try:
+        with h5py.File(wavefile_path, "r") as fp:
+            return extract_parameter_from_wavefile(fp)
+    except Exception:
+        return None
+
+
+def extract_parameter_from_wavefile(fileobj):
+    """
+    Extract parameter dict from embedded config in wavefile.
+
+    Parameters
+    ----------
+    fileobj : h5py.File or h5py.Group
+        Open HDF5 file or group containing 'config' dataset.
+
+    Returns
+    -------
+    dict or None
+        Parameter dict if found, None otherwise.
+    """
+    if "config" not in fileobj:
+        return None
+
+    try:
+        config_obj = pickle.loads(fileobj["config"][()].tobytes())
+    except Exception:
+        return None
+
+    if isinstance(config_obj, dict):
+        if isinstance(config_obj.get("parameter", None), dict):
+            return config_obj["parameter"]
+        configuration = config_obj.get("configuration", None)
+        if isinstance(configuration, dict) and isinstance(
+            configuration.get("parameter", None), dict
+        ):
+            return configuration["parameter"]
+    return None
 
 
 def read_wavefit_results(fitfile, good_only=False):
@@ -178,17 +295,27 @@ def read_wavefit_results(fitfile, good_only=False):
             result["omega"] = np.abs(omega_abs)
 
     # Compute wc (electron cyclotron frequency) and wp (electron plasma frequency)
-    # In normalized simulation units: wc = |B|, wp = sqrt(Ne)
-    # wc = |qe| * B / (me * cc) = |B| (since qe=-1, me=1, cc=1)
+    # In normalized simulation units: wc = |B|
+    # wp = sqrt(Ne / nppc), normalized so wp = 1 when Ne = nppc
+    # (This comes from wp^2 = ne * qe^2 / me, with me = 1/npc and qe = -wp_config/npc*sqrt(gamma))
     if all(k in result for k in ["Bx", "By", "Bz"]):
         B_mag = np.sqrt(result["Bx"] ** 2 + result["By"] ** 2 + result["Bz"] ** 2)
         result["wc"] = np.abs(B_mag)
-        # wp = sqrt(Ne) - compute from Ne in fit results if available
-        if "Ne" in result:
-            ne_data = result["Ne"]
-            result["wp"] = np.sqrt(ne_data)
-        else:
-            result["wp"] = np.full_like(B_mag, np.nan)
+
+    # Get nppc from parameter for wp calculation
+    nppc = 1  # default
+    try:
+        parameter = extract_parameter_from_fitfile(fitfile)
+        if parameter is not None:
+            nppc = parameter.get("nppc", 1)
+    except Exception:
+        pass
+
+    if "Ne" in result and nppc > 0:
+        ne_data = result["Ne"]
+        result["wp"] = np.sqrt(ne_data / nppc)
+    elif all(k in result for k in ["Bx", "By", "Bz"]):
+        result["wp"] = np.full_like(result["Bx"], np.nan)
 
     # Filter good fits if requested
     if good_only and "is_good" in result:
