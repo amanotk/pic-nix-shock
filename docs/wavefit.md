@@ -95,6 +95,21 @@ In other words, the sign of helicity and the sign of temporal polarization are o
 
 [1] Terasawa, T., Hoshino, M., Sakai, J.-I., and Hada, T. (1986), "Decay instability of finite-amplitude circularly polarized Alfvén waves: A numerical simulation of stimulated Brillouin scattering," *J. Geophys. Res.*, 91(A4), 4171–4187, doi:10.1029/JA091iA04p04171. (See Appendix B for the helicity/spiral decomposition and the relation between spatial helicity and temporal polarization.)
 
+### Frequency and Wavenumber Conventions
+
+The wave frequency (`omega`) and wavenumber (`k`) returned by wavefit are defined such that:
+
+- **R-mode polarization**: `omega > 0` (corresponds to `omega < 0` → L-mode)
+- **Poynting flux sign**: `sign(omega / k)` corresponds to the sign of the Poynting flux
+
+The formulas used are:
+- `sign_k_dot_b = sign(kx*Bx + ky*By)`
+- `sign_phi_diff = sign(phiE - phiB)` (phase difference normalized to [-π, π])
+- `omega = |k| * c * Ew/Bw * sign_k_dot_b * sign_phi_diff * helicity`
+- `k = -sign_k_dot_b * sqrt(kx^2 + ky^2) * helicity`
+
+where `c = 1` in normalized simulation units.
+
 ### Number of Free Parameters
 
 If we assume that the window function is fixed (i.e., $x_0$, $y_0$, $\sigma$ are given), the free parameters are as follows.

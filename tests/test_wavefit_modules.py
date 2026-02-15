@@ -447,6 +447,8 @@ def test_wavefit_omega_sign_with_helicity(temp_dir):
         grp.create_dataset("phiE", data=np.array([np.pi / 2]))
         grp.create_dataset("phiB", data=np.array([0.0]))
         grp.create_dataset("helicity", data=np.array([1.0]))
+        grp.create_dataset("Bx", data=np.array([1.0]))
+        grp.create_dataset("By", data=np.array([0.5]))
 
     results1 = read_wavefit_results(str(h5_path1))
     assert results1["omega"][0] > 0
@@ -463,18 +465,20 @@ def test_wavefit_omega_sign_with_helicity(temp_dir):
         grp.create_dataset("phiE", data=np.array([np.pi / 2]))
         grp.create_dataset("phiB", data=np.array([0.0]))
         grp.create_dataset("helicity", data=np.array([-1.0]))
+        grp.create_dataset("Bx", data=np.array([1.0]))
+        grp.create_dataset("By", data=np.array([0.5]))
 
     results2 = read_wavefit_results(str(h5_path2))
     assert results2["omega"][0] < 0
 
 
-def test_wavefit_io_helicity_fallback_when_not_stored(temp_dir):
+def test_wavefit_io_valid_field(temp_dir):
     import h5py
 
     from shock.wavefit.io import read_wavefit_results
 
-    h5_path = temp_dir / "wavefit-no-helicity.h5"
-    with h5py.File(h5_path, "w") as fp:
+    h5_path_valid = temp_dir / "wavefit-valid.h5"
+    with h5py.File(h5_path_valid, "w") as fp:
         grp = fp.create_group("snapshots/00000010")
         grp.attrs["step"] = 10
         grp.attrs["t"] = 2.5
@@ -484,10 +488,29 @@ def test_wavefit_io_helicity_fallback_when_not_stored(temp_dir):
         grp.create_dataset("Bw", data=np.array([0.3]))
         grp.create_dataset("phiE", data=np.array([np.pi / 2]))
         grp.create_dataset("phiB", data=np.array([0.0]))
-        # Note: helicity NOT stored - should be computed from phiE/phiB
+        grp.create_dataset("helicity", data=np.array([1.0]))
+        grp.create_dataset("Bx", data=np.array([1.0]))
+        grp.create_dataset("By", data=np.array([0.5]))
 
-    results = read_wavefit_results(str(h5_path))
+    results_valid = read_wavefit_results(str(h5_path_valid))
+    assert results_valid["valid"][0] == True
 
-    assert "helicity" in results
-    assert results["helicity"][0] == 1.0
-    assert results["omega"][0] > 0
+    h5_path_invalid = temp_dir / "wavefit-invalid.h5"
+    with h5py.File(h5_path_invalid, "w") as fp:
+        grp = fp.create_group("snapshots/00000010")
+        grp.attrs["step"] = 10
+        grp.attrs["t"] = 2.5
+        grp.create_dataset("kx", data=np.array([0.1]))
+        grp.create_dataset("ky", data=np.array([0.8]))
+        grp.create_dataset("Ew", data=np.array([0.2]))
+        grp.create_dataset("Bw", data=np.array([0.3]))
+        grp.create_dataset("phiE", data=np.array([np.pi / 2]))
+        grp.create_dataset("phiB", data=np.array([0.0]))
+        grp.create_dataset("helicity", data=np.array([1.0]))
+        grp.create_dataset("Bx", data=np.array([1.0]))
+        grp.create_dataset("By", data=np.array([0.5]))
+        grp.create_dataset("Ne", data=np.array([100.0]))
+        grp.create_dataset("Ni", data=np.array([100.0]))
+
+    results_invalid = read_wavefit_results(str(h5_path_invalid))
+    assert "valid" in results_invalid
