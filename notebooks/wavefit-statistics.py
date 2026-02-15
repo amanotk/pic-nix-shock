@@ -57,7 +57,7 @@ def _(filename):
     df = add_k_magnitude(df)
     df = add_phase_speed(df)
     df_valid = filter_valid(df)
-    return (df,)
+    return df, df_valid
 
 
 @app.cell
@@ -68,9 +68,31 @@ def _(df):
 
 @app.cell
 def _(df):
-    df_well_fitted = df[df["nrmse_balanced"]<0.5]
+    df_well_fitted = df[df["nrmse_balanced"] < 0.5]
     df_well_fitted
     return (df_well_fitted,)
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    # Fitting Quality
+    """)
+    return
+
+
+@app.cell
+def _(df_valid, plt):
+    nrmse = df_valid["nrmse_balanced"]
+
+    fig_nrmse = plt.figure(2)
+    plt.hist(nrmse, bins=50, edgecolor="black", alpha=0.7)
+    plt.xlabel("nrmse_balanced")
+    plt.ylabel("Count")
+    plt.title(f"Fitting Quality (N={len(nrmse)})")
+    plt.grid()
+    fig_nrmse
+    return
 
 
 @app.cell(hide_code=True)
@@ -88,14 +110,14 @@ def _(df_well_fitted, plt):
     wc = df_well_fitted["wc"]
     wp = df_well_fitted["wp"]
 
-    fig = plt.figure(1)
-    plt.scatter(k/wp, omega/wc, marker=".")
+    fig_disp = plt.figure(1)
+    plt.scatter(k / wp, omega / wc, marker=".")
     plt.xlim(-1.0, +1.0)
     plt.ylim(+0.0, +0.5)
     plt.ylabel(r"$\omega / \Omega_{ce}$")
     plt.xlabel(r"$k c / \omega_{pe}$")
     plt.grid()
-    fig
+    fig_disp
     return
 
 
