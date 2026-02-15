@@ -105,7 +105,7 @@ The wave frequency (`omega`) and wavenumber (`k`) returned by wavefit are define
 The formulas used are:
 - `sign_k_dot_b = sign(kx*Bx + ky*By)`
 - `sign_phi_diff = sign(phiE - phiB)` (phase difference normalized to [-π, π])
-- `omega = |k| * c * Ew/Bw * sign_k_dot_b * sign_phi_diff * helicity`
+- `omega = - |k| * c * Ew/Bw * sign_k_dot_b * sign_phi_diff * helicity`
 - `k = -sign_k_dot_b * sqrt(kx^2 + ky^2) * helicity`
 
 where `c = 1` in normalized simulation units.

@@ -301,8 +301,8 @@ def _compute_omega_and_k(data, valid):
     Bx = data["Bx"][valid]
     By = data["By"][valid]
 
-    k_mag = np.sqrt(kx**2 + ky**2)
-    omega_abs = k_mag * Ew / (Bw + 1e-32)
+    k_abs = np.sqrt(kx**2 + ky**2)
+    omega_abs = k_abs * Ew / (Bw + 1e-32)
 
     sign_k_dot_b = np.sign(kx * Bx + ky * By)
     sign_k_dot_b = np.where(sign_k_dot_b == 0, 1, sign_k_dot_b)
@@ -312,8 +312,9 @@ def _compute_omega_and_k(data, valid):
     sign_phi_diff = np.sign(phi_diff)
     sign_phi_diff = np.where(sign_phi_diff == 0, 1, sign_phi_diff)
 
-    omega = omega_abs * sign_k_dot_b * sign_phi_diff * helicity
-    k = -sign_k_dot_b * k_mag * helicity
+    # negative sign ensures that positive omega corresponds to R-mode polarization
+    omega = -omega_abs * sign_k_dot_b * sign_phi_diff * helicity
+    k = -sign_k_dot_b * k_abs * helicity
 
     data["omega"][valid] = omega
     data["k"][valid] = k

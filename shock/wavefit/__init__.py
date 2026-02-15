@@ -1,6 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from .analysis import (
+    add_k_magnitude,
+    add_phase_speed,
+    background_statistics,
+    describe_all_columns,
+    filter_valid,
+    fitting_statistics,
+    helicity_counts,
+    mode_counts,
+    overview_stats,
+    wave_statistics,
+)
 from .cli import WaveFitAnalyzer, main, pick_candidate_points
 from .fit import build_patch_masks, fit_one_candidate
 from .io import read_wavefit_results
@@ -23,6 +35,16 @@ __all__ = [
     "pick_candidate_points",
     "build_patch_masks",
     "read_wavefit_results",
+    "filter_valid",
+    "add_phase_speed",
+    "add_k_magnitude",
+    "overview_stats",
+    "fitting_statistics",
+    "wave_statistics",
+    "background_statistics",
+    "helicity_counts",
+    "mode_counts",
+    "describe_all_columns",
     "wrap_to_pi",
     "periodic_delta",
     "build_xy",
