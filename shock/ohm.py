@@ -56,7 +56,7 @@ def idx(i, j, Nx, Ny=None):
     return i + Nx * j
 
 
-def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4, bc_type):
+def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4):
     """
     Assemble sparse matrix for coupled (Ex, Ey) system.
 
@@ -66,6 +66,7 @@ def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4, bc_type):
     - Axy, Ayx: mixed derivative terms (diagonal neighbors)
 
     The discretization follows wavetool.md equations (2a)-(2b).
+    Uses periodic boundary conditions.
 
     Parameters
     ----------
@@ -79,8 +80,6 @@ def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4, bc_type):
         c²/Δ²
     c2_dx4 : float
         c²/(4Δ²)
-    bc_type : str
-        'periodic' or 'neumann_x_periodic_y'
 
     Returns
     -------
@@ -100,18 +99,10 @@ def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4, bc_type):
         for i in range(Nx):
             k = idx(i, j, Nx)
 
-            k_ym = idx(i, (j - 1) % Ny, Nx) if bc_type == "periodic" else idx(i, max(j - 1, 0), Nx)
-            k_yp = (
-                idx(i, (j + 1) % Ny, Nx)
-                if bc_type == "periodic"
-                else idx(i, min(j + 1, Ny - 1), Nx)
-            )
-            k_xm = idx((i - 1) % Nx, j, Nx) if bc_type == "periodic" else idx(max(i - 1, 0), j, Nx)
-            k_xp = (
-                idx((i + 1) % Nx, j, Nx)
-                if bc_type == "periodic"
-                else idx(min(i + 1, Nx - 1), j, Nx)
-            )
+            k_ym = idx(i, (j - 1) % Ny, Nx)
+            k_yp = idx(i, (j + 1) % Ny, Nx)
+            k_xm = idx((i - 1) % Nx, j, Nx)
+            k_xp = idx((i + 1) % Nx, j, Nx)
 
             lambda_val = Lambda_flat[k]
 
@@ -130,27 +121,10 @@ def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4, bc_type):
             data[nnz] = -c2_dx2
             nnz += 1
 
-            if bc_type == "neumann_x_periodic_y":
-                if i == 0:
-                    k_xm_diag = idx(0, j, Nx)
-                    k_xp_diag = idx(1, j, Nx)
-                    k_xm_diag_ym = idx(0, max(j - 1, 0), Nx)
-                    k_xm_diag_yp = idx(0, min(j + 1, Ny - 1), Nx)
-                elif i == Nx - 1:
-                    k_xm_diag = idx(Nx - 2, j, Nx)
-                    k_xp_diag = idx(Nx - 1, j, Nx)
-                    k_xm_diag_ym = idx(Nx - 1, max(j - 1, 0), Nx)
-                    k_xm_diag_yp = idx(Nx - 1, min(j + 1, Ny - 1), Nx)
-                else:
-                    k_xm_diag = k_xm
-                    k_xp_diag = k_xp
-                    k_xm_diag_ym = idx((i - 1) % Nx, max(j - 1, 0), Nx) if j > 0 else k_xm
-                    k_xm_diag_yp = idx((i - 1) % Nx, min(j + 1, Ny - 1), Nx)
-            else:
-                k_xm_diag = k_xm
-                k_xp_diag = k_xp
-                k_xm_diag_ym = idx((i - 1) % Nx, (j - 1) % Ny, Nx)
-                k_xm_diag_yp = idx((i - 1) % Nx, (j + 1) % Ny, Nx)
+            k_xm_diag = k_xm
+            k_xp_diag = k_xp
+            k_xm_diag_ym = idx((i - 1) % Nx, (j - 1) % Ny, Nx)
+            k_xm_diag_yp = idx((i - 1) % Nx, (j + 1) % Ny, Nx)
 
             row[nnz] = k
             col[nnz] = N + idx((i + 1) % Nx, (j + 1) % Ny, Nx)
@@ -175,18 +149,10 @@ def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4, bc_type):
     for j in range(Ny):
         for i in range(Nx):
             k = idx(i, j, Nx)
-            k_ym = idx(i, (j - 1) % Ny, Nx) if bc_type == "periodic" else idx(i, max(j - 1, 0), Nx)
-            k_yp = (
-                idx(i, (j + 1) % Ny, Nx)
-                if bc_type == "periodic"
-                else idx(i, min(j + 1, Ny - 1), Nx)
-            )
-            k_xm = idx((i - 1) % Nx, j, Nx) if bc_type == "periodic" else idx(max(i - 1, 0), j, Nx)
-            k_xp = (
-                idx((i + 1) % Nx, j, Nx)
-                if bc_type == "periodic"
-                else idx(min(i + 1, Nx - 1), j, Nx)
-            )
+            k_ym = idx(i, (j - 1) % Ny, Nx)
+            k_yp = idx(i, (j + 1) % Ny, Nx)
+            k_xm = idx((i - 1) % Nx, j, Nx)
+            k_xp = idx((i + 1) % Nx, j, Nx)
 
             lambda_val = Lambda_flat[k]
 
@@ -235,13 +201,15 @@ def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4, bc_type):
     return A
 
 
-def assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2, bc_type):
+def assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2):
     """
     Assemble sparse matrix for Ez (independent from Ex, Ey).
 
     From wavetool.md, equation (2c):
     (∇×∇×E)_z ≈ -(c²/Δ²)(Ez_{i+1,j} - 2Ez_{i,j} + Ez_{i-1,j})
                  -(c²/Δ²)(Ez_{i,j+1} - 2Ez_{i,j} + Ez_{i,j-1})
+
+    Uses periodic boundary conditions.
 
     Parameters
     ----------
@@ -253,8 +221,6 @@ def assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2, bc_type):
         Lambda array of shape (Nx, Ny)
     c2_dx2 : float
         c²/Δ²
-    bc_type : str
-        'periodic' or 'neumann_x_periodic_y'
 
     Returns
     -------
@@ -274,18 +240,10 @@ def assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2, bc_type):
         for i in range(Nx):
             k = idx(i, j, Nx)
 
-            k_ym = idx(i, (j - 1) % Ny, Nx) if bc_type == "periodic" else idx(i, max(j - 1, 0), Nx)
-            k_yp = (
-                idx(i, (j + 1) % Ny, Nx)
-                if bc_type == "periodic"
-                else idx(i, min(j + 1, Ny - 1), Nx)
-            )
-            k_xm = idx((i - 1) % Nx, j, Nx) if bc_type == "periodic" else idx(max(i - 1, 0), j, Nx)
-            k_xp = (
-                idx((i + 1) % Nx, j, Nx)
-                if bc_type == "periodic"
-                else idx(min(i + 1, Nx - 1), j, Nx)
-            )
+            k_ym = idx(i, (j - 1) % Ny, Nx)
+            k_yp = idx(i, (j + 1) % Ny, Nx)
+            k_xm = idx((i - 1) % Nx, j, Nx)
+            k_xp = idx((i + 1) % Nx, j, Nx)
 
             lambda_val = Lambda_flat[k]
 
@@ -324,11 +282,12 @@ def assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2, bc_type):
     return A
 
 
-def solve_ohm_2d(Lambda, S, c, delta, bc="periodic", solver_opts=None):
+def solve_ohm_2d(Lambda, S, c, delta, solver_opts=None):
     """
     Solve the 2D generalized Ohm's law.
 
     Solves: (Λ + c²∇×∇×)E = S
+    Uses periodic boundary conditions.
 
     Parameters
     ----------
@@ -340,8 +299,6 @@ def solve_ohm_2d(Lambda, S, c, delta, bc="periodic", solver_opts=None):
         Speed of light
     delta : float
         Grid spacing Δ (assumes dx = dy = Δ)
-    bc : str, optional
-        Boundary condition: 'periodic' or 'neumann_x_periodic_y'
     solver_opts : dict, optional
         Solver options:
         - 'method': 'direct' (default) or 'iterative'
@@ -372,8 +329,8 @@ def solve_ohm_2d(Lambda, S, c, delta, bc="periodic", solver_opts=None):
     c2_dx2 = c2 / (delta * delta)
     c2_dx4 = c2 / (4.0 * delta * delta)
 
-    A_ex_ey = assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4, bc)
-    A_ez = assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2, bc)
+    A_ex_ey = assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4)
+    A_ez = assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2)
 
     S_ex_ey = np.concatenate([S[0].flatten(order="F"), S[1].flatten(order="F")])
     S_ez = S[2].flatten(order="F")
