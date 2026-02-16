@@ -56,132 +56,6 @@ def idx(i, j, Nx, Ny=None):
     return i + Nx * j
 
 
-def apply_bc_periodic(arr, Nx, Ny, axis0_size=None):
-    """
-    Apply periodic boundary conditions to a field array.
-
-    For periodic BC in both x and y:
-        A[-1, j] -> A[Nx-1, j]
-        A[Nx, j] -> A[0, j]
-        A[i, -1] -> A[i, Ny-1]
-        A[i, Ny] -> A[i, 0]
-
-    Parameters
-    ----------
-    arr : ndarray
-        Input array of shape (Nx, Ny), (3, Nx, Ny), or (3, 3, Nx, Ny)
-    Nx : int
-        Number of points in x
-    Ny : int
-        Number of points in y
-    axis0_size : int, optional
-        Size of first axis (1 for scalar, 3 for vector, 9 for tensor)
-        If None, inferred from arr.shape[0]
-
-    Returns
-    -------
-    ndarray
-        Array with periodic BC applied (same shape as input)
-    """
-    if arr.ndim == 2:
-        result = np.empty((Nx + 2, Ny + 2), dtype=arr.dtype)
-        result[1:-1, 1:-1] = arr
-        result[0, 1:-1] = arr[Nx - 1, :]
-        result[Nx + 1, 1:-1] = arr[0, :]
-        result[1:-1, 0] = arr[:, Ny - 1]
-        result[1:-1, Ny + 1] = arr[:, 0]
-        result[0, 0] = arr[Nx - 1, Ny - 1]
-        result[0, Ny + 1] = arr[Nx - 1, 0]
-        result[Nx + 1, 0] = arr[0, Ny - 1]
-        result[Nx + 1, Ny + 1] = arr[0, 0]
-    elif arr.ndim == 3:
-        result = np.empty((arr.shape[0], Nx + 2, Ny + 2), dtype=arr.dtype)
-        result[:, 1:-1, 1:-1] = arr
-        result[:, 0, 1:-1] = arr[:, Nx - 1, :]
-        result[:, Nx + 1, 1:-1] = arr[:, 0, :]
-        result[:, 1:-1, 0] = arr[:, :, Ny - 1]
-        result[:, 1:-1, Ny + 1] = arr[:, :, 0]
-        result[:, 0, 0] = arr[:, Nx - 1, Ny - 1]
-        result[:, 0, Ny + 1] = arr[:, Nx - 1, 0]
-        result[:, Nx + 1, 0] = arr[:, 0, Ny - 1]
-        result[:, Nx + 1, Ny + 1] = arr[:, 0, 0]
-    else:
-        result = np.empty((arr.shape[0], arr.shape[1], Nx + 2, Ny + 2), dtype=arr.dtype)
-        result[:, :, 1:-1, 1:-1] = arr
-        result[:, :, 0, 1:-1] = arr[:, :, Nx - 1, :]
-        result[:, :, Nx + 1, 1:-1] = arr[:, :, 0, :]
-        result[:, :, 1:-1, 0] = arr[:, :, :, Ny - 1]
-        result[:, :, 1:-1, Ny + 1] = arr[:, :, :, 0]
-        result[:, :, 0, 0] = arr[:, :, Nx - 1, Ny - 1]
-        result[:, :, 0, Ny + 1] = arr[:, :, Nx - 1, 0]
-        result[:, :, Nx + 1, 0] = arr[:, :, 0, Ny - 1]
-        result[:, :, Nx + 1, Ny + 1] = arr[:, :, 0, 0]
-    return result
-
-
-def apply_bc_neumann_x_periodic_y(arr, Nx, Ny, axis0_size=None):
-    """
-    Apply Neumann BC in x (∂/∂x = 0 at boundaries) and periodic in y.
-
-    Uses even reflection for ghost cells:
-        A[-1, j] = A[0, j]
-        A[Nx, j] = A[Nx-1, j]
-    And periodic in y:
-        A[i, -1] = A[i, Ny-1]
-        A[i, Ny] = A[i, 0]
-
-    Parameters
-    ----------
-    arr : ndarray
-        Input array of shape (Nx, Ny), (3, Nx, Ny), or (3, 3, Nx, Ny)
-    Nx : int
-        Number of points in x
-    Ny : int
-        Number of points in y
-    axis0_size : int, optional
-        Size of first axis (1 for scalar, 3 for vector, 9 for tensor)
-
-    Returns
-    -------
-    ndarray
-        Array with BC applied (same shape as input)
-    """
-    if arr.ndim == 2:
-        result = np.empty((Nx + 2, Ny + 2), dtype=arr.dtype)
-        result[1:-1, 1:-1] = arr
-        result[0, 1:-1] = arr[0, :]
-        result[Nx + 1, 1:-1] = arr[Nx - 1, :]
-        result[1:-1, 0] = arr[:, Ny - 1]
-        result[1:-1, Ny + 1] = arr[:, 0]
-        result[0, 0] = arr[0, Ny - 1]
-        result[0, Ny + 1] = arr[0, 0]
-        result[Nx + 1, 0] = arr[Nx - 1, Ny - 1]
-        result[Nx + 1, Ny + 1] = arr[Nx - 1, 0]
-    elif arr.ndim == 3:
-        result = np.empty((arr.shape[0], Nx + 2, Ny + 2), dtype=arr.dtype)
-        result[:, 1:-1, 1:-1] = arr
-        result[:, 0, 1:-1] = arr[:, 0, :]
-        result[:, Nx + 1, 1:-1] = arr[:, Nx - 1, :]
-        result[:, 1:-1, 0] = arr[:, :, Ny - 1]
-        result[:, 1:-1, Ny + 1] = arr[:, :, 0]
-        result[:, 0, 0] = arr[:, 0, Ny - 1]
-        result[:, 0, Ny + 1] = arr[:, 0, 0]
-        result[:, Nx + 1, 0] = arr[:, Nx - 1, Ny - 1]
-        result[:, Nx + 1, Ny + 1] = arr[:, Nx - 1, 0]
-    else:
-        result = np.empty((arr.shape[0], arr.shape[1], Nx + 2, Ny + 2), dtype=arr.dtype)
-        result[:, :, 1:-1, 1:-1] = arr
-        result[:, :, 0, 1:-1] = arr[:, :, 0, :]
-        result[:, :, Nx + 1, 1:-1] = arr[:, :, Nx - 1, :]
-        result[:, :, 1:-1, 0] = arr[:, :, :, Ny - 1]
-        result[:, :, 1:-1, Ny + 1] = arr[:, :, :, 0]
-        result[:, :, 0, 0] = arr[:, :, 0, Ny - 1]
-        result[:, :, 0, Ny + 1] = arr[:, :, 0, 0]
-        result[:, :, Nx + 1, 0] = arr[:, :, Nx - 1, Ny - 1]
-        result[:, :, Nx + 1, Ny + 1] = arr[:, :, Nx - 1, 0]
-    return result
-
-
 def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4, bc_type):
     """
     Assemble sparse matrix for coupled (Ex, Ey) system.
@@ -450,104 +324,18 @@ def assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2, bc_type):
     return A
 
 
-def compute_source(Gamma, Pi, B, c, delta, bc_type):
-    """
-    Compute source term S = -(Γ/c)×B + ∇·Π.
-
-    From wavetool.md, equations (3a)-(3c):
-    S^x ≈ -(1/c)(Γ^y B^z - Γ^z B^y)
-          + (1/(2Δ))[(Π^{xx}_{i+1,j}-Π^{xx}_{i-1,j}) + (Π^{xy}_{i,j+1}-Π^{xy}_{i,j-1})]
-
-    S^y ≈ -(1/c)(Γ^z B^x - Γ^x B^z)
-          + (1/(2Δ))[(Π^{yx}_{i+1,j}-Π^{yx}_{i-1,j}) + (Π^{yy}_{i,j+1}-Π^{yy}_{i,j-1})]
-
-    S^z ≈ -(1/c)(Γ^x B^y - Γ^y B^x)
-          + (1/(2Δ))[(Π^{zx}_{i+1,j}-Π^{zx}_{i-1,j}) + (Π^{zy}_{i,j+1}-Π^{zy}_{i,j-1})]
-
-    Parameters
-    ----------
-    Gamma : ndarray
-        Gamma array of shape (3, Nx, Ny)
-    Pi : ndarray
-        Pi tensor of shape (3, 3, Nx, Ny)
-    B : ndarray
-        B field of shape (3, Nx, Ny)
-    c : float
-        Speed of light
-    delta : float
-        Grid spacing Δ
-    bc_type : str
-        'periodic' or 'neumann_x_periodic_y'
-
-    Returns
-    -------
-    ndarray
-        Source term S of shape (3, Nx, Ny)
-    """
-    Nx, Ny = Gamma.shape[1], Gamma.shape[2]
-
-    if bc_type == "periodic":
-        Gamma_ext = apply_bc_periodic(Gamma, Nx, Ny)
-        Pi_ext = apply_bc_periodic(Pi, Nx, Ny)
-        B_ext = apply_bc_periodic(B, Nx, Ny)
-    else:
-        Gamma_ext = apply_bc_neumann_x_periodic_y(Gamma, Nx, Ny)
-        Pi_ext = apply_bc_neumann_x_periodic_y(Pi, Nx, Ny)
-        B_ext = apply_bc_neumann_x_periodic_y(B, Nx, Ny)
-
-    S = np.zeros((3, Nx, Ny))
-    inv_2d = 1.0 / (2.0 * delta)
-
-    for j in range(1, Ny + 1):
-        for i in range(1, Nx + 1):
-            Gx = Gamma_ext[0, i, j]
-            Gy = Gamma_ext[1, i, j]
-            Gz = Gamma_ext[2, i, j]
-
-            Bx = B_ext[0, i, j]
-            By = B_ext[1, i, j]
-            Bz = B_ext[2, i, j]
-
-            S[0, i - 1, j - 1] = -(1.0 / c) * (Gy * Bz - Gz * By) + inv_2d * (
-                Pi_ext[0, 0, i + 1, j]
-                - Pi_ext[0, 0, i - 1, j]
-                + Pi_ext[0, 1, i, j + 1]
-                - Pi_ext[0, 1, i, j - 1]
-            )
-
-            S[1, i - 1, j - 1] = -(1.0 / c) * (Gz * Bx - Gx * Bz) + inv_2d * (
-                Pi_ext[1, 0, i + 1, j]
-                - Pi_ext[1, 0, i - 1, j]
-                + Pi_ext[1, 1, i, j + 1]
-                - Pi_ext[1, 1, i, j - 1]
-            )
-
-            S[2, i - 1, j - 1] = -(1.0 / c) * (Gx * By - Gy * Bx) + inv_2d * (
-                Pi_ext[2, 0, i + 1, j]
-                - Pi_ext[2, 0, i - 1, j]
-                + Pi_ext[2, 1, i, j + 1]
-                - Pi_ext[2, 1, i, j - 1]
-            )
-
-    return S
-
-
-def solve_ohm_2d(Lambda, Gamma, Pi, B, c, delta, bc="periodic", solver_opts=None, S=None):
+def solve_ohm_2d(Lambda, S, c, delta, bc="periodic", solver_opts=None):
     """
     Solve the 2D generalized Ohm's law.
 
-    Solves: (Λ + c²∇×∇×)E = -(Γ/c)×B + ∇·Π
+    Solves: (Λ + c²∇×∇×)E = S
 
     Parameters
     ----------
     Lambda : ndarray
         Lambda array of shape (Nx, Ny)
-    Gamma : ndarray
-        Gamma vector of shape (3, Nx, Ny)
-    Pi : ndarray
-        Pi tensor of shape (3, 3, Nx, Ny)
-    B : ndarray
-        B field of shape (3, Nx, Ny)
+    S : ndarray
+        Source term of shape (3, Nx, Ny)
     c : float
         Speed of light
     delta : float
@@ -560,9 +348,6 @@ def solve_ohm_2d(Lambda, Gamma, Pi, B, c, delta, bc="periodic", solver_opts=None
         - 'tol': tolerance for iterative solver (default 1e-10)
         - 'maxiter': max iterations for GMRES (default 1000)
         - 'use_amg': use AMG preconditioner if available (default True)
-    S : ndarray, optional
-        Pre-computed source term of shape (3, Nx, Ny).
-        If provided, overrides the internal computation from Gamma, Pi, B.
 
     Returns
     -------
@@ -573,7 +358,6 @@ def solve_ohm_2d(Lambda, Gamma, Pi, B, c, delta, bc="periodic", solver_opts=None
     -----
     The discretization follows wavetool.md:
     - Equations (2a)-(2c) for (∇×∇×E) finite-difference approximation
-    - Equations (3a)-(3c) for source term S = -(Γ/c)×B + ∇·Π
     """
     if solver_opts is None:
         solver_opts = {}
@@ -588,9 +372,6 @@ def solve_ohm_2d(Lambda, Gamma, Pi, B, c, delta, bc="periodic", solver_opts=None
     c2_dx2 = c2 / (delta * delta)
     c2_dx4 = c2 / (4.0 * delta * delta)
 
-    if S is None:
-        S = compute_source(Gamma, Pi, B, c, delta, bc)
-
     A_ex_ey = assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4, bc)
     A_ez = assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2, bc)
 
@@ -602,8 +383,6 @@ def solve_ohm_2d(Lambda, Gamma, Pi, B, c, delta, bc="periodic", solver_opts=None
         E_ez = spsolve(A_ez, S_ez)
     else:
         if use_amg and HAS_PYAMG:
-            from scipy.sparse.linalg import LinearOperator
-
             M_ex_ey = pyamg.ruge_stuben(A_ex_ey)
             M_ez = pyamg.ruge_stuben(A_ez)
 
@@ -651,77 +430,3 @@ def solve_ohm_2d(Lambda, Gamma, Pi, B, c, delta, bc="periodic", solver_opts=None
     E[2] = E_ez.reshape((Nx, Ny), order="F")
 
     return E
-
-
-def apply_ohm_operator(E, Lambda, c, delta, bc_type):
-    """
-    Apply the Ohm operator (Λ + c²∇×∇×) to a field E.
-
-    Useful for testing and verification.
-
-    Parameters
-    ----------
-    E : ndarray
-        Electric field of shape (3, Nx, Ny)
-    Lambda : ndarray
-        Lambda array of shape (Nx, Ny)
-    c : float
-        Speed of light
-    delta : float
-        Grid spacing
-    bc_type : str
-        'periodic' or 'neumann_x_periodic_y'
-
-    Returns
-    -------
-    ndarray
-        (Λ + c²∇×∇×)E of shape (3, Nx, Ny)
-    """
-    Nx, Ny = E.shape[1], E.shape[2]
-    c2_dx2 = (c * c) / (delta * delta)
-    c2_dx4 = (c * c) / (4.0 * delta * delta)
-
-    if bc_type == "periodic":
-        E_ext = apply_bc_periodic(E, Nx, Ny, 3)
-    else:
-        E_ext = apply_bc_neumann_x_periodic_y(E, Nx, Ny, 3)
-
-    result = np.zeros((3, Nx, Ny))
-
-    for j in range(1, Ny + 1):
-        for i in range(1, Nx + 1):
-            result[0, i - 1, j - 1] = (
-                Lambda[i - 1, j - 1] * E[0, i - 1, j - 1]
-                - c2_dx2 * (E_ext[0, i, j + 1] - 2 * E_ext[0, i, j] + E_ext[0, i, j - 1])
-                + c2_dx4
-                * (
-                    E_ext[1, i + 1, j + 1]
-                    - E_ext[1, i + 1, j - 1]
-                    - E_ext[1, i - 1, j + 1]
-                    + E_ext[1, i - 1, j - 1]
-                )
-            )
-
-    for j in range(1, Ny + 1):
-        for i in range(1, Nx + 1):
-            result[1, i - 1, j - 1] = (
-                Lambda[i - 1, j - 1] * E[1, i - 1, j - 1]
-                - c2_dx2 * (E_ext[1, i + 1, j] - 2 * E_ext[1, i, j] + E_ext[1, i - 1, j])
-                + c2_dx4
-                * (
-                    E_ext[0, i + 1, j + 1]
-                    - E_ext[0, i + 1, j - 1]
-                    - E_ext[0, i - 1, j + 1]
-                    + E_ext[0, i - 1, j - 1]
-                )
-            )
-
-    for j in range(1, Ny + 1):
-        for i in range(1, Nx + 1):
-            result[2, i - 1, j - 1] = (
-                Lambda[i - 1, j - 1] * E[2, i - 1, j - 1]
-                - c2_dx2 * (E_ext[2, i + 1, j] - 2 * E_ext[2, i, j] + E_ext[2, i - 1, j])
-                - c2_dx2 * (E_ext[2, i, j + 1] - 2 * E_ext[2, i, j] + E_ext[2, i, j - 1])
-            )
-
-    return result
