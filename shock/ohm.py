@@ -24,9 +24,8 @@ def idx(i, j, Nx, Ny=None):
     """
     Flatten 2D index to 1D.
 
-    Uses column-major ordering: k = i + Nx * j.
-    This matches Fortran order and the meshgrid convention where
-    the first index varies fastest.
+    Uses x-fastest flattening: k = i + Nx * j.
+    For arrays shaped (Ny, Nx), this matches C-order flattening.
 
     Parameters
     ----------
@@ -37,7 +36,7 @@ def idx(i, j, Nx, Ny=None):
     Nx : int
         Number of grid points in x
     Ny : int, optional
-        Number of grid points in y (if not given, Nx is used as stride)
+        Number of grid points in y (unused, kept for compatibility)
 
     Returns
     -------
@@ -68,7 +67,7 @@ def assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4):
     Ny : int
         Number of grid points in y
     Lambda : ndarray
-        Lambda array of shape (Nx, Ny), may be spatially varying
+        Lambda array of shape (Ny, Nx), may be spatially varying
     c2_dx2 : float
         c²/Δ²
     c2_dx4 : float
@@ -86,7 +85,7 @@ def assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4):
     col = np.zeros(nnz_estimate, dtype=np.int32)
     nnz = 0
 
-    Lambda_flat = Lambda.flatten(order="F")
+    Lambda_flat = Lambda.flatten(order="C")
 
     for j in range(Ny):
         for i in range(Nx):
@@ -211,7 +210,7 @@ def assemble_matrix_2(Nx, Ny, Lambda, c2_dx2):
     Ny : int
         Number of grid points in y
     Lambda : ndarray
-        Lambda array of shape (Nx, Ny)
+        Lambda array of shape (Ny, Nx)
     c2_dx2 : float
         c²/Δ²
 
@@ -227,7 +226,7 @@ def assemble_matrix_2(Nx, Ny, Lambda, c2_dx2):
     col = np.zeros(nnz_estimate, dtype=np.int32)
     nnz = 0
 
-    Lambda_flat = Lambda.flatten(order="F")
+    Lambda_flat = Lambda.flatten(order="C")
 
     for j in range(Ny):
         for i in range(Nx):
@@ -285,9 +284,9 @@ def solve_ohm_2d(Lambda, S, c, delta):
     Parameters
     ----------
     Lambda : ndarray
-        Lambda array of shape (Nx, Ny)
+        Lambda array of shape (Ny, Nx)
     S : ndarray
-        Source term of shape (3, Nx, Ny)
+        Source term of shape (Ny, Nx, 3)
     c : float
         Speed of light
     delta : float
@@ -296,14 +295,14 @@ def solve_ohm_2d(Lambda, S, c, delta):
     Returns
     -------
     ndarray
-        Electric field E of shape (3, Nx, Ny)
+        Electric field E of shape (Ny, Nx, 3)
 
     Notes
     -----
     The discretization follows wavetool.md:
     - Equations (2a)-(2c) for (∇×∇×E) finite-difference approximation
     """
-    Nx, Ny = Lambda.shape
+    Ny, Nx = Lambda.shape
     c2 = c * c
     c2_dx2 = c2 / (delta * delta)
     c2_dx4 = c2 / (4.0 * delta * delta)
@@ -311,16 +310,16 @@ def solve_ohm_2d(Lambda, S, c, delta):
     A_1 = assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4)
     A_2 = assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
 
-    S_1 = np.concatenate([S[0].flatten(order="F"), S[1].flatten(order="F")])
-    S_2 = S[2].flatten(order="F")
+    S_1 = np.concatenate([S[..., 0].flatten(order="C"), S[..., 1].flatten(order="C")])
+    S_2 = S[..., 2].flatten(order="C")
 
     N = Nx * Ny
     E_1, _ = gmres(A_1, S_1, restart=min(2 * N, 100), maxiter=1000)
     E_2, _ = gmres(A_2, S_2, restart=min(N, 100), maxiter=1000)
 
-    E = np.zeros((3, Nx, Ny))
-    E[0] = E_1[: Nx * Ny].reshape((Nx, Ny), order="F")
-    E[1] = E_1[Nx * Ny :].reshape((Nx, Ny), order="F")
-    E[2] = E_2.reshape((Nx, Ny), order="F")
+    E = np.zeros((Ny, Nx, 3))
+    E[..., 0] = E_1[: Nx * Ny].reshape((Ny, Nx), order="C")
+    E[..., 1] = E_1[Nx * Ny :].reshape((Ny, Nx), order="C")
+    E[..., 2] = E_2.reshape((Ny, Nx), order="C")
 
     return E
