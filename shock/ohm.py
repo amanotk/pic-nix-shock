@@ -17,14 +17,7 @@ References:
 
 import numpy as np
 from scipy import sparse
-from scipy.sparse.linalg import gmres, spsolve
-
-try:
-    import pyamg
-
-    HAS_PYAMG = True
-except ImportError:
-    HAS_PYAMG = False
+from scipy.sparse.linalg import gmres
 
 
 def idx(i, j, Nx, Ny=None):
@@ -56,9 +49,9 @@ def idx(i, j, Nx, Ny=None):
     return i + Nx * j
 
 
-def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4):
+def assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4):
     """
-    Assemble sparse matrix for coupled (Ex, Ey) system.
+    Assemble sparse matrix for system 1 (Ex, Ey coupled).
 
     Builds a 2N × 2N block matrix where N = Nx * Ny:
     - Axx: Ex y-second-difference + Λ
@@ -201,9 +194,9 @@ def assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4):
     return A
 
 
-def assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2):
+def assemble_matrix_2(Nx, Ny, Lambda, c2_dx2):
     """
-    Assemble sparse matrix for Ez (independent from Ex, Ey).
+    Assemble sparse matrix for system 2 (Ez decoupled).
 
     From wavetool.md, equation (2c):
     (∇×∇×E)_z ≈ -(c²/Δ²)(Ez_{i+1,j} - 2Ez_{i,j} + Ez_{i-1,j})
@@ -282,7 +275,7 @@ def assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2):
     return A
 
 
-def solve_ohm_2d(Lambda, S, c, delta, solver_opts=None):
+def solve_ohm_2d(Lambda, S, c, delta):
     """
     Solve the 2D generalized Ohm's law.
 
@@ -299,12 +292,6 @@ def solve_ohm_2d(Lambda, S, c, delta, solver_opts=None):
         Speed of light
     delta : float
         Grid spacing Δ (assumes dx = dy = Δ)
-    solver_opts : dict, optional
-        Solver options:
-        - 'method': 'direct' (default) or 'iterative'
-        - 'tol': tolerance for iterative solver (default 1e-10)
-        - 'maxiter': max iterations for GMRES (default 1000)
-        - 'use_amg': use AMG preconditioner if available (default True)
 
     Returns
     -------
@@ -316,74 +303,24 @@ def solve_ohm_2d(Lambda, S, c, delta, solver_opts=None):
     The discretization follows wavetool.md:
     - Equations (2a)-(2c) for (∇×∇×E) finite-difference approximation
     """
-    if solver_opts is None:
-        solver_opts = {}
-
-    method = solver_opts.get("method", "direct")
-    tol = solver_opts.get("tol", 1e-10)
-    maxiter = solver_opts.get("maxiter", 1000)
-    use_amg = solver_opts.get("use_amg", True)
-
     Nx, Ny = Lambda.shape
     c2 = c * c
     c2_dx2 = c2 / (delta * delta)
     c2_dx4 = c2 / (4.0 * delta * delta)
 
-    A_ex_ey = assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4)
-    A_ez = assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2)
+    A_1 = assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4)
+    A_2 = assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
 
-    S_ex_ey = np.concatenate([S[0].flatten(order="F"), S[1].flatten(order="F")])
-    S_ez = S[2].flatten(order="F")
+    S_1 = np.concatenate([S[0].flatten(order="F"), S[1].flatten(order="F")])
+    S_2 = S[2].flatten(order="F")
 
-    if method == "direct":
-        E_ex_ey = spsolve(A_ex_ey, S_ex_ey)
-        E_ez = spsolve(A_ez, S_ez)
-    else:
-        if use_amg and HAS_PYAMG:
-            M_ex_ey = pyamg.ruge_stuben(A_ex_ey)
-            M_ez = pyamg.ruge_stuben(A_ez)
-
-            def preconditioner_ex_ey(r):
-                return pyamg.gmres(M_ex_ey, r, maxiter=1)[0]
-
-            def preconditioner_ez(r):
-                return pyamg.gmres(M_ez, r, maxiter=1)[0]
-        else:
-            from scipy.sparse.linalg import spilu
-
-            M_ex_ey = spilu(A_ex_ey, drop_tol=1e-4)
-            M_ez = spilu(A_ez, drop_tol=1e-4)
-
-            def preconditioner_ex_ey(r):
-                return M_ex_ey.solve(r)
-
-            def preconditioner_ez(r):
-                return M_ez.solve(r)
-
-        E_ex_ey, info_ex_ey = gmres(
-            A_ex_ey,
-            S_ex_ey,
-            M=preconditioner_ex_ey,
-            rtol=tol,
-            maxiter=maxiter,
-            restart=min(2 * Nx * Ny, 100),
-        )
-        E_ez, info_ez = gmres(
-            A_ez, S_ez, M=preconditioner_ez, rtol=tol, maxiter=maxiter, restart=min(Nx * Ny, 100)
-        )
-
-        if info_ex_ey != 0:
-            import warnings
-
-            warnings.warn(f"GMRES for Ex,Ey did not converge, info={info_ex_ey}")
-        if info_ez != 0:
-            import warnings
-
-            warnings.warn(f"GMRES for Ez did not converge, info={info_ez}")
+    N = Nx * Ny
+    E_1, _ = gmres(A_1, S_1, restart=min(2 * N, 100), maxiter=1000)
+    E_2, _ = gmres(A_2, S_2, restart=min(N, 100), maxiter=1000)
 
     E = np.zeros((3, Nx, Ny))
-    E[0] = E_ex_ey[: Nx * Ny].reshape((Nx, Ny), order="F")
-    E[1] = E_ex_ey[Nx * Ny :].reshape((Nx, Ny), order="F")
-    E[2] = E_ez.reshape((Nx, Ny), order="F")
+    E[0] = E_1[: Nx * Ny].reshape((Nx, Ny), order="F")
+    E[1] = E_1[Nx * Ny :].reshape((Nx, Ny), order="F")
+    E[2] = E_2.reshape((Nx, Ny), order="F")
 
     return E

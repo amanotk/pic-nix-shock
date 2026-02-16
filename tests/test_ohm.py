@@ -57,7 +57,7 @@ class TestEzFourierVerification:
         S = np.zeros((3, Nx, Ny))
         S[2] = eigenvalue * E_true[2]
 
-        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta, solver_opts={"method": "direct"})
+        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta)
 
         rel_err_Ez = np.max(np.abs(E_solved[2] - E_true[2])) / np.max(np.abs(E_true[2]))
 
@@ -75,9 +75,9 @@ class TestEzMatrix:
         delta = 1.0
         c2_dx2 = c * c / (delta * delta)
 
-        A_ez = ohm.assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2)
+        A_2 = ohm.assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
 
-        diag = A_ez.diagonal()
+        diag = A_2.diagonal()
         expected_diag = 1.0 + 4 * c2_dx2
 
         assert_allclose(diag, expected_diag)
@@ -90,15 +90,15 @@ class TestEzMatrix:
         delta = 1.0
         c2_dx2 = c * c / (delta * delta)
 
-        A_ez = ohm.assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2)
+        A_2 = ohm.assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
 
-        assert A_ez[0, 1] == -c2_dx2
-        assert A_ez[0, Nx] == -c2_dx2
+        assert A_2[0, 1] == -c2_dx2
+        assert A_2[0, Nx] == -c2_dx2
 
 
 class TestExEyMatrixFourierVerification:
     """
-    Test assemble_ex_ey_matrix using analytic Fourier verification.
+    Test assemble_matrix_1 using analytic Fourier verification.
 
     From wavetool.md:
     [ Λ + 4(c²/Δ²) sin²(kyΔ/2),   -c²/Δ² sin(kxΔ) sin(kyΔ) ]
@@ -140,7 +140,7 @@ class TestExEyMatrixFourierVerification:
         S[0] = A_xx * E_true[0] + A_xy * E_true[1]
         S[1] = A_xy * E_true[0] + A_yy * E_true[1]
 
-        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta, solver_opts={"method": "direct"})
+        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta)
 
         rel_err_Ex = np.max(np.abs(E_solved[0] - E_true[0])) / np.max(np.abs(E_true[0]))
         rel_err_Ey = np.max(np.abs(E_solved[1] - E_true[1])) / np.max(np.abs(E_true[1]))
@@ -181,19 +181,19 @@ class TestExOnlyFourierVerification:
 
         c2_dx2 = c * c / (delta * delta)
         c2_dx4 = c * c / (4.0 * delta * delta)
-        A_ex_ey = ohm.assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4)
-        A_ez = ohm.assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2)
+        A_1 = ohm.assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4)
+        A_2 = ohm.assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
 
         E_flat = np.concatenate([E_true[0].flatten(order="F"), E_true[1].flatten(order="F")])
-        S_ex_ey = A_ex_ey @ E_flat
-        S_ez = A_ez @ E_true[2].flatten(order="F")
+        S_1 = A_1 @ E_flat
+        S_2 = A_2 @ E_true[2].flatten(order="F")
 
         S = np.zeros((3, Nx, Ny))
-        S[0] = S_ex_ey[: Nx * Ny].reshape((Nx, Ny), order="F")
-        S[1] = S_ex_ey[Nx * Ny :].reshape((Nx, Ny), order="F")
-        S[2] = S_ez.reshape((Nx, Ny), order="F")
+        S[0] = S_1[: Nx * Ny].reshape((Nx, Ny), order="F")
+        S[1] = S_1[Nx * Ny :].reshape((Nx, Ny), order="F")
+        S[2] = S_2.reshape((Nx, Ny), order="F")
 
-        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta, solver_opts={"method": "direct"})
+        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta)
 
         rel_err_Ex = np.max(np.abs(E_solved[0] - E_true[0])) / np.max(np.abs(E_true[0]))
         rel_err_Ey = np.max(np.abs(E_solved[1] - E_true[1]))
@@ -234,19 +234,19 @@ class TestEyOnlyFourierVerification:
 
         c2_dx2 = c * c / (delta * delta)
         c2_dx4 = c * c / (4.0 * delta * delta)
-        A_ex_ey = ohm.assemble_ex_ey_matrix(Nx, Ny, Lambda, c2_dx2, c2_dx4)
-        A_ez = ohm.assemble_ez_matrix(Nx, Ny, Lambda, c2_dx2)
+        A_1 = ohm.assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4)
+        A_2 = ohm.assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
 
         E_flat = np.concatenate([E_true[0].flatten(order="F"), E_true[1].flatten(order="F")])
-        S_ex_ey = A_ex_ey @ E_flat
-        S_ez = A_ez @ E_true[2].flatten(order="F")
+        S_1 = A_1 @ E_flat
+        S_2 = A_2 @ E_true[2].flatten(order="F")
 
         S = np.zeros((3, Nx, Ny))
-        S[0] = S_ex_ey[: Nx * Ny].reshape((Nx, Ny), order="F")
-        S[1] = S_ex_ey[Nx * Ny :].reshape((Nx, Ny), order="F")
-        S[2] = S_ez.reshape((Nx, Ny), order="F")
+        S[0] = S_1[: Nx * Ny].reshape((Nx, Ny), order="F")
+        S[1] = S_1[Nx * Ny :].reshape((Nx, Ny), order="F")
+        S[2] = S_2.reshape((Nx, Ny), order="F")
 
-        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta, solver_opts={"method": "direct"})
+        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta)
 
         rel_err_Ex = np.max(np.abs(E_solved[0] - E_true[0]))
         rel_err_Ey = np.max(np.abs(E_solved[1] - E_true[1])) / np.max(np.abs(E_true[1]))
