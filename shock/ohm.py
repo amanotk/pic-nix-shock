@@ -58,7 +58,7 @@ def assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4):
     - Axy, Ayx: mixed derivative terms (diagonal neighbors)
 
     The discretization follows wavetool.md equations (2a)-(2b).
-    Uses periodic boundary conditions.
+    Uses periodic boundary conditions in both x and y directions.
 
     Parameters
     ----------
@@ -112,11 +112,6 @@ def assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4):
             col[nnz] = k_yp
             data[nnz] = -c2_dx2
             nnz += 1
-
-            k_xm_diag = k_xm
-            k_xp_diag = k_xp
-            k_xm_diag_ym = idx((i - 1) % Nx, (j - 1) % Ny, Nx)
-            k_xm_diag_yp = idx((i - 1) % Nx, (j + 1) % Ny, Nx)
 
             row[nnz] = k
             col[nnz] = N + idx((i + 1) % Nx, (j + 1) % Ny, Nx)
@@ -201,7 +196,7 @@ def assemble_matrix_2(Nx, Ny, Lambda, c2_dx2):
     (∇×∇×E)_z ≈ -(c²/Δ²)(Ez_{i+1,j} - 2Ez_{i,j} + Ez_{i-1,j})
                  -(c²/Δ²)(Ez_{i,j+1} - 2Ez_{i,j} + Ez_{i,j-1})
 
-    Uses periodic boundary conditions.
+    Uses periodic boundary conditions in both x and y directions.
 
     Parameters
     ----------
@@ -279,7 +274,7 @@ def solve_ohm_2d(Lambda, S, c, delta):
     Solve the 2D generalized Ohm's law.
 
     Solves: (Λ + c²∇×∇×)E = S
-    Uses periodic boundary conditions.
+    Uses periodic boundary conditions in both x and y directions.
 
     Parameters
     ----------
@@ -302,7 +297,15 @@ def solve_ohm_2d(Lambda, S, c, delta):
     The discretization follows wavetool.md:
     - Equations (2a)-(2c) for (∇×∇×E) finite-difference approximation
     """
+    if Lambda.ndim != 2:
+        raise ValueError(f"Lambda must be 2D with shape (Ny, Nx), got {Lambda.shape}")
+    if S.ndim != 3 or S.shape[-1] != 3:
+        raise ValueError(f"S must have shape (Ny, Nx, 3), got {S.shape}")
+
     Ny, Nx = Lambda.shape
+    if S.shape[:2] != (Ny, Nx):
+        raise ValueError(f"S spatial shape {S.shape[:2]} must match Lambda shape {(Ny, Nx)}")
+
     c2 = c * c
     c2_dx2 = c2 / (delta * delta)
     c2_dx4 = c2 / (4.0 * delta * delta)

@@ -16,6 +16,22 @@ def test_idx_flattening():
     assert ohm.idx(Nx - 1, Ny - 1, Nx) == Nx * Ny - 1
 
 
+def test_solve_ohm_2d_shape_validation():
+    """Test solve_ohm_2d rejects invalid input shapes."""
+    Lambda = np.ones((8, 8))
+    c = 1.0
+    delta = 1.0
+
+    with pytest.raises(ValueError, match="Lambda must be 2D"):
+        ohm.solve_ohm_2d(np.ones((8, 8, 1)), np.zeros((8, 8, 3)), c, delta)
+
+    with pytest.raises(ValueError, match="S must have shape \(Ny, Nx, 3\)"):
+        ohm.solve_ohm_2d(Lambda, np.zeros((3, 8, 8)), c, delta)
+
+    with pytest.raises(ValueError, match="must match Lambda shape"):
+        ohm.solve_ohm_2d(Lambda, np.zeros((7, 8, 3)), c, delta)
+
+
 class TestEzFourierVerification:
     """
     Test periodic boundary conditions using discrete Fourier verification for Ez only.
