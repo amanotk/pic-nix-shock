@@ -8,7 +8,7 @@ The generalized Ohm’s law may be written quite generally in the following form
 (\Lambda + c^2 \nabla \times \nabla \times) \mathbf{E} = -\frac{\Gamma}{c} \times \mathbf{B} + \nabla \cdot \Pi.
 ```
 
-In this project we use Lorentz-Heaviside units, so explicit $4\pi$ factors are not included.
+Note that use Lorentz-Heaviside units so that $4\pi$ factors are absorbed.
 
 The quantities $\Lambda, \Gamma, \Pi$ appearing in the above equation are defined as follows:
 
@@ -65,18 +65,17 @@ Clearly, these transformed moments are related to $\Lambda, \Gamma, \Pi$ as foll
 \end{pmatrix}.
 \end{aligned}
 ```
-from which the electric field may be obtained by using the generalized Ohm’s law [1].
+Substituting the above expressions into the generalized Ohm’s law, we can obtain the electric field.
 
 ## Numerical Implementation
-The generalized Ohm's law is a second-order partial differential equation.
-With a finite difference representation, the electric field can be obtained by inverting a matrix.
+### Finite Difference Approximation
+The generalized Ohm's law is a second-order partial differential equation, with the spatial derivative term arises from the finite electron inertia effect. When the derivative is approximated by finite difference, the electric field can be obtained numerically by inverting the corresponding matrix.
 
-Using the formula:
+Here we only consider the 2D case ($\partial/\partial z = 0$) for simplicity. Using the formula:
 ```math
 \nabla \times \nabla \times \mathbf{E} = - \nabla^2 \mathbf{E} + \nabla \left( \nabla \cdot \mathbf{E} \right),
 ```
-and limiting ourselves to 2D ($\partial/\partial z = 0$), the second-order finite difference representation,
-assuming the equal grid size $\Delta$ both in $x$ and $y$ directions, yields:
+and using the second-order central finite difference assuming the equal grid size $\Delta$ both in $x$ and $y$ directions, we have the following approximations:
 ```math
 \begin{aligned}
 & \left( \nabla \times \nabla \times \mathbf{E} \right)_x \approx
@@ -92,9 +91,52 @@ assuming the equal grid size $\Delta$ both in $x$ and $y$ directions, yields:
 -\frac{c^2}{\Delta^2} \left( E^z_{i,j+1} - 2 E^z_{i,j} + E^z_{i,j-1} \right).
 \end{aligned}
 ```
+We note that the equations for $E^x$ and $E^y$ are coupled, whereas $E^z$ is independent of the other components.
 
-We note that the equations for $E_x$ and $E_y$ are coupled, whereas $E_z$ is independent of the other components.
+Similarly, the source term on the right-hand side of the generalized Ohm's law may be approximated as follows:
+```math
+\begin{aligned}
+& S^x = \left( -\frac{\Gamma}{c} \times \mathbf{B} + \nabla \cdot \Pi \right)^x \approx
+-\frac{1}{c} \left( \Gamma^y B^z - \Gamma^z B^y \right)
++ \frac{1}{2 \Delta} \left( \Pi^{xx}_{i+1,j} - \Pi^{xx}_{i-1,j} + \Pi^{xy}_{i,j+1} - \Pi^{xy}_{i,j-1} \right)
+\\
+& S^y = \left( -\frac{\Gamma}{c} \times \mathbf{B} + \nabla \cdot \Pi \right)^y \approx
+-\frac{1}{c} \left( \Gamma^z B^x - \Gamma^x B^z \right)
++ \frac{1}{2 \Delta} \left( \Pi^{yx}_{i+1,j} - \Pi^{yx}_{i-1,j} + \Pi^{yy}_{i,j+1} - \Pi^{yy}_{i,j-1} \right)
+\\
+& S^z = \left( -\frac{\Gamma}{c} \times \mathbf{B} + \nabla \cdot \Pi \right)^z \approx
+-\frac{1}{c} \left( \Gamma^x B^y - \Gamma^y B^x \right) + \frac{1}{2 \Delta} \left( \Pi^{zx}_{i+1,j} - \Pi^{zx}_{i-1,j} + \Pi^{zy}_{i,j+1} - \Pi^{zy}_{i,j-1} \right).
+\end{aligned}
+```
 
+### Boundary Condition
+We use the periodic boundary condition in the $y$-direction, whereas $\partial/\partial x = 0$ is assumed at the boundaries in the $x$-direction.
+
+### Verification
+Assuming that a physical quantity $A(x,y)$ vary in the form: $A(x,y) = \tilde{A} \exp \left[ i (k_x x + k_y y) \right]$ and substituting it into the finite difference approximation of the generalized Ohm's law, we can obtain the following algebraic equation:
+```math
+\begin{aligned}
+\begin{pmatrix}
+\Lambda + 4 \dfrac{c^2}{\Delta^2} \sin^2 \left( \dfrac{k_y \Delta}{2} \right) &
+-\dfrac{c^2}{\Delta^2} \sin \left( k_x \Delta \right) \sin \left( k_y \Delta \right) &
+0 \\
+-\dfrac{c^2}{\Delta^2} \sin \left( k_x \Delta \right) \sin \left( k_y \Delta \right) &
+\Lambda + 4 \dfrac{c^2}{\Delta^2} \sin^2 \left( \dfrac{k_x \Delta}{2} \right) &
+0 \\
+0 &
+0 &
+\Lambda + 4 \dfrac{c^2}{\Delta^2}
+\left[
+    \sin^2 \left( \dfrac{k_x \Delta}{2} \right) +
+    \sin^2 \left( \dfrac{k_y \Delta}{2} \right)
+\right]
+\end{pmatrix}
+\begin{pmatrix} \tilde{E}^x \\ \tilde{E}^y \\ \tilde{E}^z \end{pmatrix}
+=
+\begin{pmatrix} \tilde{S}^x \\ \tilde{S}^y \\ \tilde{S}^z \end{pmatrix},
+\end{aligned}
+```
+where we have assumed that $\Lambda$ is constant for simplicity. Inverting the above matrix, we can obtain the electric field $\tilde{E}^x, \tilde{E}^y, \tilde{E}^z$ for the given source term $\tilde{S}^x, \tilde{S}^y, \tilde{S}^z$. This can be used to verify the numerical implementation of the generalized Ohm's law.
 
 ## Reference
 
