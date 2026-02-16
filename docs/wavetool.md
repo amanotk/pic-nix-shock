@@ -1,6 +1,6 @@
 # Document for `wavetool.py`
 
-## Electric field from Ohm’s law
+## Ohm’s law
 
 The generalized Ohm’s law may be written quite generally in the following form (see [1]):
 
@@ -8,7 +8,7 @@ The generalized Ohm’s law may be written quite generally in the following form
 (\Lambda + c^2 \nabla \times \nabla \times) \mathbf{E} = -\frac{\Gamma}{c} \times \mathbf{B} + \nabla \cdot \Pi.
 ```
 
-In this project we use Lorentz-Heaviside units, so explicit `4\pi` factors are not included.
+In this project we use Lorentz-Heaviside units, so explicit $4\pi$ factors are not included.
 
 The quantities $\Lambda, \Gamma, \Pi$ appearing in the above equation are defined as follows:
 
@@ -66,6 +66,35 @@ Clearly, these transformed moments are related to $\Lambda, \Gamma, \Pi$ as foll
 \end{aligned}
 ```
 from which the electric field may be obtained by using the generalized Ohm’s law [1].
+
+## Numerical Implementation
+The generalized Ohm's law is a second-order partial differential equation.
+With a finite difference representation, the electric field can be obtained by inverting a matrix.
+
+Using the formula:
+```math
+\nabla \times \nabla \times \mathbf{E} = - \nabla^2 \mathbf{E} + \nabla \left( \nabla \cdot \mathbf{E} \right),
+```
+and limiting ourselves to 2D ($\partial/\partial z = 0$), the second-order finite difference representation,
+assuming the equal grid size $\Delta$ both in $x$ and $y$ directions, yields:
+```math
+\begin{aligned}
+& \left( \nabla \times \nabla \times \mathbf{E} \right)_x \approx
+-\frac{c^2}{\Delta^2} \left( E^x_{i,j+1} - 2 E^x_{i,j} + E^x_{i,j-1} \right)
++\frac{c^2}{4 \Delta^2} \left( E^y_{i+1,j+1} - E^y_{i+1,j-1} - E^y_{i-1,j+1} + E^y_{i-1,j-1} \right)
+\\
+& \left( \nabla \times \nabla \times \mathbf{E} \right)_y \approx
+-\frac{c^2}{\Delta^2} \left( E^y_{i+1,j} - 2 E^y_{i,j} + E^y_{i-1,j} \right)
++\frac{c^2}{4 \Delta^2} \left( E^x_{i+1,j+1} - E^x_{i+1,j-1} - E^x_{i-1,j+1} + E^x_{i-1,j-1} \right)
+\\
+& \left( \nabla \times \nabla \times \mathbf{E} \right)_z \approx
+-\frac{c^2}{\Delta^2} \left( E^z_{i+1,j} - 2 E^z_{i,j} + E^z_{i-1,j} \right)
+-\frac{c^2}{\Delta^2} \left( E^z_{i,j+1} - 2 E^z_{i,j} + E^z_{i,j-1} \right).
+\end{aligned}
+```
+
+We note that the equations for $E_x$ and $E_y$ are coupled, whereas $E_z$ is independent of the other components.
+
 
 ## Reference
 
