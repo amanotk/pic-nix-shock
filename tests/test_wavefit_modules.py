@@ -420,7 +420,7 @@ def test_wavefit_io_helicity_and_omega(temp_dir):
         grp.create_dataset("Ne", data=np.array([100.0]))
         grp.create_dataset("Ni", data=np.array([100.0]))
         grp.create_dataset("Bx", data=np.array([1.0]))
-        grp.create_dataset("By", data=np.array([0.5]))
+        grp.create_dataset("By", data=np.array([-0.5]))
         grp.create_dataset("Bz", data=np.array([0.0]))
 
     results = read_wavefit_results(str(h5_path))
@@ -448,7 +448,7 @@ def test_wavefit_omega_sign_with_helicity(temp_dir):
         grp.create_dataset("phiB", data=np.array([0.0]))
         grp.create_dataset("helicity", data=np.array([1.0]))
         grp.create_dataset("Bx", data=np.array([1.0]))
-        grp.create_dataset("By", data=np.array([0.5]))
+        grp.create_dataset("By", data=np.array([-0.5]))
 
     results1 = read_wavefit_results(str(h5_path1))
     assert results1["omega"][0] > 0
@@ -466,7 +466,7 @@ def test_wavefit_omega_sign_with_helicity(temp_dir):
         grp.create_dataset("phiB", data=np.array([0.0]))
         grp.create_dataset("helicity", data=np.array([-1.0]))
         grp.create_dataset("Bx", data=np.array([1.0]))
-        grp.create_dataset("By", data=np.array([0.5]))
+        grp.create_dataset("By", data=np.array([-0.5]))
 
     results2 = read_wavefit_results(str(h5_path2))
     assert results2["omega"][0] < 0
@@ -490,7 +490,7 @@ def test_wavefit_io_valid_field(temp_dir):
         grp.create_dataset("phiB", data=np.array([0.0]))
         grp.create_dataset("helicity", data=np.array([1.0]))
         grp.create_dataset("Bx", data=np.array([1.0]))
-        grp.create_dataset("By", data=np.array([0.5]))
+        grp.create_dataset("By", data=np.array([-0.5]))
 
     results_valid = read_wavefit_results(str(h5_path_valid))
     assert results_valid["valid"][0] == True
@@ -508,7 +508,7 @@ def test_wavefit_io_valid_field(temp_dir):
         grp.create_dataset("phiB", data=np.array([0.0]))
         grp.create_dataset("helicity", data=np.array([1.0]))
         grp.create_dataset("Bx", data=np.array([1.0]))
-        grp.create_dataset("By", data=np.array([0.5]))
+        grp.create_dataset("By", data=np.array([-0.5]))
         grp.create_dataset("Ne", data=np.array([100.0]))
         grp.create_dataset("Ni", data=np.array([100.0]))
 
