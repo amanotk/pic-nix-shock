@@ -18,18 +18,18 @@ def test_idx_flattening():
 
 def test_solve_ohm_2d_shape_validation():
     """Test solve_ohm_2d rejects invalid input shapes."""
-    Lambda = np.ones((8, 8))
+    L = np.ones((8, 8))
     c = 1.0
     delta = 1.0
 
-    with pytest.raises(ValueError, match="Lambda must be 2D"):
+    with pytest.raises(ValueError, match="L must be 2D"):
         ohm.solve_ohm_2d(np.ones((8, 8, 1)), np.zeros((8, 8, 3)), c, delta)
 
-    with pytest.raises(ValueError, match="S must have shape \(Ny, Nx, 3\)"):
-        ohm.solve_ohm_2d(Lambda, np.zeros((3, 8, 8)), c, delta)
+    with pytest.raises(ValueError, match=r"S must have shape \(Ny, Nx, 3\)"):
+        ohm.solve_ohm_2d(L, np.zeros((3, 8, 8)), c, delta)
 
-    with pytest.raises(ValueError, match="must match Lambda shape"):
-        ohm.solve_ohm_2d(Lambda, np.zeros((7, 8, 3)), c, delta)
+    with pytest.raises(ValueError, match="must match L shape"):
+        ohm.solve_ohm_2d(L, np.zeros((7, 8, 3)), c, delta)
 
 
 def test_solve_ohm_2d_with_precomputed_bases_matches_default():
@@ -42,15 +42,15 @@ def test_solve_ohm_2d_with_precomputed_bases_matches_default():
     y = np.arange(Ny)
     xx = np.broadcast_to(x, (Ny, Nx))
     yy = np.broadcast_to(y[:, None], (Ny, Nx))
-    Lambda = 0.5 + 0.1 * np.cos(2 * np.pi * xx / Nx) + 0.05 * np.sin(2 * np.pi * yy / Ny)
+    L = 0.5 + 0.1 * np.cos(2 * np.pi * xx / Nx) + 0.05 * np.sin(2 * np.pi * yy / Ny)
 
     rng = np.random.default_rng(123)
     S = rng.normal(size=(Ny, Nx, 3))
 
-    A_1_base, A_2_base = ohm.build_ohm_bases_from_grid(Nx, Ny, c, delta)
+    base1, base2 = ohm.build_ohm_bases_from_grid(Nx, Ny, c, delta)
 
-    E_default = ohm.solve_ohm_2d(Lambda, S, c, delta)
-    E_with_bases = ohm.solve_ohm_2d(Lambda, S, c, delta, A_1_base=A_1_base, A_2_base=A_2_base)
+    E_default = ohm.solve_ohm_2d(L, S, c, delta)
+    E_with_bases = ohm.solve_ohm_2d(L, S, c, delta, base1=base1, base2=base2)
 
     np.testing.assert_allclose(E_with_bases, E_default, rtol=1e-11, atol=1e-12)
 
@@ -62,16 +62,16 @@ def test_solve_ohm_2d_base_shape_validation():
     delta = 1.0
     N = Nx * Ny
 
-    Lambda = np.ones((Ny, Nx))
+    L = np.ones((Ny, Nx))
     S = np.zeros((Ny, Nx, 3))
 
-    bad_A_1_base = sparse.eye(2 * N - 1, format="csr")
-    with pytest.raises(ValueError, match="A_1_base shape"):
-        ohm.solve_ohm_2d(Lambda, S, c, delta, A_1_base=bad_A_1_base)
+    bad_base1 = sparse.eye(2 * N - 1, format="csr")
+    with pytest.raises(ValueError, match="base1 shape"):
+        ohm.solve_ohm_2d(L, S, c, delta, base1=bad_base1)
 
-    bad_A_2_base = sparse.eye(N - 1, format="csr")
-    with pytest.raises(ValueError, match="A_2_base shape"):
-        ohm.solve_ohm_2d(Lambda, S, c, delta, A_2_base=bad_A_2_base)
+    bad_base2 = sparse.eye(N - 1, format="csr")
+    with pytest.raises(ValueError, match="base2 shape"):
+        ohm.solve_ohm_2d(L, S, c, delta, base2=bad_base2)
 
 
 class TestFourierVerification:
@@ -95,8 +95,8 @@ class TestFourierVerification:
         kx = 2 * np.pi * mx / Lx
         ky = 2 * np.pi * my / Ly
 
-        Lambda_val = 0.5
-        Lambda = np.full((Ny, Nx), Lambda_val)
+        L_val = 0.5
+        L = np.full((Ny, Nx), L_val)
         c = 1.0
         c2 = c * c
 
@@ -109,14 +109,14 @@ class TestFourierVerification:
         E_true = np.zeros((Ny, Nx, 3))
         E_true[..., 2] = Ez0 * np.cos(kx * xx + ky * yy)
 
-        eigenvalue = Lambda_val + 4 * c2 / (delta * delta) * (
+        eigenvalue = L_val + 4 * c2 / (delta * delta) * (
             np.sin(kx * delta / 2) ** 2 + np.sin(ky * delta / 2) ** 2
         )
 
         S = np.zeros((Ny, Nx, 3))
         S[..., 2] = eigenvalue * E_true[..., 2]
 
-        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta)
+        E_solved = ohm.solve_ohm_2d(L, S, c, delta)
 
         rel_err_Ez = np.max(np.abs(E_solved[..., 2] - E_true[..., 2])) / np.max(
             np.abs(E_true[..., 2])
@@ -135,8 +135,8 @@ class TestFourierVerification:
         kx = 2 * np.pi * mx / Lx
         ky = 2 * np.pi * my / Ly
 
-        Lambda_val = 0.5
-        Lambda = np.full((Ny, Nx), Lambda_val)
+        L_val = 0.5
+        L = np.full((Ny, Nx), L_val)
         c = 1.0
         c2 = c * c
         c2_dx2 = c2 / (delta * delta)
@@ -152,15 +152,15 @@ class TestFourierVerification:
         E_true[..., 0] = Ex0 * np.cos(kx * xx + ky * yy)
         E_true[..., 1] = Ey0 * np.cos(kx * xx + ky * yy)
 
-        A_xx = Lambda_val + 4 * c2_dx2 * np.sin(ky * delta / 2) ** 2
-        A_yy = Lambda_val + 4 * c2_dx2 * np.sin(kx * delta / 2) ** 2
+        A_xx = L_val + 4 * c2_dx2 * np.sin(ky * delta / 2) ** 2
+        A_yy = L_val + 4 * c2_dx2 * np.sin(kx * delta / 2) ** 2
         A_xy = -c2_dx2 * np.sin(kx * delta) * np.sin(ky * delta)
 
         S = np.zeros((Ny, Nx, 3))
         S[..., 0] = A_xx * E_true[..., 0] + A_xy * E_true[..., 1]
         S[..., 1] = A_xy * E_true[..., 0] + A_yy * E_true[..., 1]
 
-        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta)
+        E_solved = ohm.solve_ohm_2d(L, S, c, delta)
 
         rel_err_Ex = np.max(np.abs(E_solved[..., 0] - E_true[..., 0])) / np.max(
             np.abs(E_true[..., 0])
@@ -183,8 +183,8 @@ class TestFourierVerification:
         kx = 2 * np.pi * mx / Lx
         ky = 2 * np.pi * my / Ly
 
-        Lambda_val = 0.5
-        Lambda = np.full((Ny, Nx), Lambda_val)
+        L_val = 0.5
+        L = np.full((Ny, Nx), L_val)
         c = 1.0
 
         Ex0 = 1.0
@@ -199,8 +199,8 @@ class TestFourierVerification:
 
         c2_dx2 = c * c / (delta * delta)
         c2_dx4 = c * c / (4.0 * delta * delta)
-        A_1 = ohm.assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4)
-        A_2 = ohm.assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
+        A_1 = ohm.assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4)
+        A_2 = ohm.assemble_matrix_2(Nx, Ny, L, c2_dx2)
 
         E_flat = np.concatenate(
             [E_true[..., 0].flatten(order="C"), E_true[..., 1].flatten(order="C")]
@@ -213,7 +213,7 @@ class TestFourierVerification:
         S[..., 1] = S_1[Nx * Ny :].reshape((Ny, Nx), order="C")
         S[..., 2] = S_2.reshape((Ny, Nx), order="C")
 
-        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta)
+        E_solved = ohm.solve_ohm_2d(L, S, c, delta)
 
         rel_err_Ex = np.max(np.abs(E_solved[..., 0] - E_true[..., 0])) / np.max(
             np.abs(E_true[..., 0])
@@ -234,8 +234,8 @@ class TestFourierVerification:
         kx = 2 * np.pi * mx / Lx
         ky = 2 * np.pi * my / Ly
 
-        Lambda_val = 0.5
-        Lambda = np.full((Ny, Nx), Lambda_val)
+        L_val = 0.5
+        L = np.full((Ny, Nx), L_val)
         c = 1.0
 
         Ey0 = 0.5
@@ -250,8 +250,8 @@ class TestFourierVerification:
 
         c2_dx2 = c * c / (delta * delta)
         c2_dx4 = c * c / (4.0 * delta * delta)
-        A_1 = ohm.assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4)
-        A_2 = ohm.assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
+        A_1 = ohm.assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4)
+        A_2 = ohm.assemble_matrix_2(Nx, Ny, L, c2_dx2)
 
         E_flat = np.concatenate(
             [E_true[..., 0].flatten(order="C"), E_true[..., 1].flatten(order="C")]
@@ -264,7 +264,7 @@ class TestFourierVerification:
         S[..., 1] = S_1[Nx * Ny :].reshape((Ny, Nx), order="C")
         S[..., 2] = S_2.reshape((Ny, Nx), order="C")
 
-        E_solved = ohm.solve_ohm_2d(Lambda, S, c, delta)
+        E_solved = ohm.solve_ohm_2d(L, S, c, delta)
 
         rel_err_Ex = np.max(np.abs(E_solved[..., 0] - E_true[..., 0]))
         rel_err_Ey = np.max(np.abs(E_solved[..., 1] - E_true[..., 1])) / np.max(
