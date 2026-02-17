@@ -1,5 +1,6 @@
 numpy>=1.20
 scipy>=1.7
+pyamg>=5.0
 matplotlib>=3.4
 h5py>=3.0
 toml>=0.10

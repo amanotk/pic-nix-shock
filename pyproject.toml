@@ -11,6 +11,7 @@ requires-python = ">=3.8"
 dependencies = [
     "numpy>=1.20",
     "scipy>=1.7",
+    "pyamg>=5.0",
     "lmfit>=1.2",
     "matplotlib>=3.4",
     "h5py>=3.0",

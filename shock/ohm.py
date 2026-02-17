@@ -16,8 +16,8 @@ References:
 """
 
 import numpy as np
+from pyamg import krylov
 from scipy import sparse
-from scipy.sparse.linalg import gmres
 
 
 def idx(i, j, Nx, Ny=None):
@@ -197,7 +197,34 @@ def assemble_matrix_2(Nx, Ny, L, c2_dx2, base=None):
     return base + L_diag
 
 
-def solve_ohm_2d(L, S, c, delta, base1=None, base2=None):
+def _solve_with_cg(A, b, M, maxiter, rtol):
+    """Solve Ax=b using CG and return diagnostics."""
+    residuals = []
+    x, status = krylov.cg(
+        A,
+        b,
+        M=M,
+        maxiter=maxiter,
+        tol=rtol,
+        residuals=residuals,
+    )
+
+    return x, status, residuals
+
+
+def solve_ohm_2d(
+    L,
+    S,
+    c,
+    delta,
+    base1=None,
+    base2=None,
+    rtol=1.0e-12,
+    maxiter=1000,
+    M1=None,
+    M2=None,
+    return_info=False,
+):
     """
     Solve the 2D generalized Ohm's law.
 
@@ -218,6 +245,16 @@ def solve_ohm_2d(L, S, c, delta, base1=None, base2=None):
         Precomputed Lambda-independent base matrix for system 1.
     base2 : sparse.csr_matrix, optional
         Precomputed Lambda-independent base matrix for system 2.
+    rtol : float, optional
+        Relative tolerance for CG solver.
+    maxiter : int, optional
+        Maximum number of CG iterations.
+    M1 : scipy.sparse.linalg.LinearOperator, optional
+        Optional preconditioner for system A1.
+    M2 : scipy.sparse.linalg.LinearOperator, optional
+        Optional preconditioner for system A2.
+    return_info : bool, optional
+        If True, return a tuple (E, info_dict).
 
     Returns
     -------
@@ -266,13 +303,42 @@ def solve_ohm_2d(L, S, c, delta, base1=None, base2=None):
     S_1 = np.concatenate([S[..., 0].flatten(order="C"), S[..., 1].flatten(order="C")])
     S_2 = S[..., 2].flatten(order="C")
 
-    N = Nx * Ny
-    E_1, _ = gmres(A_1, S_1, restart=min(2 * N, 100), maxiter=1000)
-    E_2, _ = gmres(A_2, S_2, restart=min(N, 100), maxiter=1000)
+    M_1 = M1
+    M_2 = M2
+    if M_1 is not None and M_1.shape != A_1.shape:
+        raise ValueError(f"M1 shape {M_1.shape} must be {A_1.shape}")
+    if M_2 is not None and M_2.shape != A_2.shape:
+        raise ValueError(f"M2 shape {M_2.shape} must be {A_2.shape}")
+
+    E_1, status_1, residuals_1 = _solve_with_cg(
+        A_1,
+        S_1,
+        M=M_1,
+        maxiter=maxiter,
+        rtol=rtol,
+    )
+    E_2, status_2, residuals_2 = _solve_with_cg(
+        A_2,
+        S_2,
+        M=M_2,
+        maxiter=maxiter,
+        rtol=rtol,
+    )
 
     E = np.zeros((Ny, Nx, 3))
     E[..., 0] = E_1[: Nx * Ny].reshape((Ny, Nx), order="C")
     E[..., 1] = E_1[Nx * Ny :].reshape((Ny, Nx), order="C")
     E[..., 2] = E_2.reshape((Ny, Nx), order="C")
 
-    return E
+    if not return_info:
+        return E
+
+    info = {
+        "status_1": status_1,
+        "status_2": status_2,
+        "niter_1": max(len(residuals_1) - 1, 0),
+        "niter_2": max(len(residuals_2) - 1, 0),
+        "residuals_1": residuals_1,
+        "residuals_2": residuals_2,
+    }
+    return E, info

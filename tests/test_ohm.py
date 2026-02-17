@@ -1,6 +1,7 @@
 """Tests for shock.ohm module - Step 1: Ez only (decoupled)."""
 
 import numpy as np
+import pyamg
 import pytest
 from scipy import sparse
 
@@ -72,6 +73,35 @@ def test_solve_ohm_2d_base_shape_validation():
     bad_base2 = sparse.eye(N - 1, format="csr")
     with pytest.raises(ValueError, match="base2 shape"):
         ohm.solve_ohm_2d(L, S, c, delta, base2=bad_base2)
+
+
+def test_solve_ohm_2d_with_external_preconditioners_matches_default():
+    """Test externally built AMG preconditioners preserve solution."""
+    Nx, Ny = 8, 8
+    c = 1.0
+    delta = 1.0
+
+    x = np.arange(Nx)
+    y = np.arange(Ny)
+    xx = np.broadcast_to(x, (Ny, Nx))
+    yy = np.broadcast_to(y[:, None], (Ny, Nx))
+    L = 0.5 + 0.1 * np.cos(2 * np.pi * xx / Nx) + 0.05 * np.sin(2 * np.pi * yy / Ny)
+
+    rng = np.random.default_rng(321)
+    S = rng.normal(size=(Ny, Nx, 3))
+
+    c2_dx2 = c * c / (delta * delta)
+    c2_dx4 = c * c / (4.0 * delta * delta)
+    base1, base2 = ohm.build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+    A_1 = ohm.assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=base1)
+    A_2 = ohm.assemble_matrix_2(Nx, Ny, L, c2_dx2, base=base2)
+    M1 = pyamg.smoothed_aggregation_solver(A_1).aspreconditioner(cycle="V")
+    M2 = pyamg.smoothed_aggregation_solver(A_2).aspreconditioner(cycle="V")
+
+    E_ref = ohm.solve_ohm_2d(L, S, c, delta)
+    E_ext = ohm.solve_ohm_2d(L, S, c, delta, M1=M1, M2=M2)
+
+    np.testing.assert_allclose(E_ext, E_ref, rtol=1e-8, atol=1e-10)
 
 
 class TestFourierVerification:
