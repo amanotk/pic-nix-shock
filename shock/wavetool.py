@@ -21,9 +21,10 @@ plt.rcParams.update({"font.size": 12})
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 try:
-    from . import base, utils
+    from . import base, ohm, utils
 except ImportError:
     import base
+    import ohm
     import utils
 
 import picnix
@@ -55,6 +56,10 @@ class DataAnalyzer(base.JobExecutor):
             for key in self.options["analyze"]:
                 self.options[key] = self.options["analyze"][key]
         self.parameter = self.read_parameter()
+        self._ohm_c = 1.0
+        self._ohm_base1_unit = None
+        self._ohm_base2_unit = None
+        self._ohm_scaled_base_cache = {}
 
     def main(self, basename):
         self.save(self.get_filename(basename, ".h5"))
@@ -84,7 +89,47 @@ class DataAnalyzer(base.JobExecutor):
         grad[tuple(dst)] = (x[tuple(src_p)] - x[tuple(src_m)]) / (2.0 * dx)
         return grad
 
-    def calc_e_ohm(self, B, M, dx, dy):
+    def prepare_ohm_bases(self, nx, ny):
+        if not hasattr(self, "_ohm_c"):
+            self._ohm_c = 1.0
+        self._ohm_base1_unit, self._ohm_base2_unit = ohm.build_ohm_bases(
+            nx,
+            ny,
+            c2_dx2=1.0,
+            c2_dx4=0.25,
+            bc_x="neumann",
+        )
+        self._ohm_scaled_base_cache = {}
+
+    def get_scaled_ohm_bases(self, delta):
+        if not hasattr(self, "_ohm_scaled_base_cache"):
+            self._ohm_scaled_base_cache = {}
+        key = float(self._ohm_c * self._ohm_c / (delta * delta))
+        if key not in self._ohm_scaled_base_cache:
+            self._ohm_scaled_base_cache[key] = (
+                key * self._ohm_base1_unit,
+                key * self._ohm_base2_unit,
+            )
+        return self._ohm_scaled_base_cache[key]
+
+    def calc_e_ohm(self, B, M, delta=None, step=None, dx=None, dy=None):
+        if delta is None:
+            if dx is None or dy is None:
+                raise ValueError("Either delta or both dx, dy must be provided")
+            if dx != dy:
+                raise ValueError("calc_e_ohm requires dx == dy")
+            delta = dx
+
+        squeeze_leading = False
+        if B.ndim == 4 and M.ndim == 4 and B.shape[0] == 1 and M.shape[0] == 1:
+            B = B[0]
+            M = M[0]
+            squeeze_leading = True
+
+        if not hasattr(self, "_ohm_base1_unit") or self._ohm_base1_unit is None:
+            ny, nx = M.shape[:2]
+            self.prepare_ohm_bases(nx, ny)
+
         Lambda = M[..., 0]
         Gamma = M[..., 1:4]
 
@@ -94,12 +139,12 @@ class DataAnalyzer(base.JobExecutor):
         Pyz = M[..., 8]
         Pzx = M[..., 9]
 
-        dPxx_dx = self.diff_central_zero_boundary(Pxx, dx, axis=1)
-        dPxy_dx = self.diff_central_zero_boundary(Pxy, dx, axis=1)
-        dPzx_dx = self.diff_central_zero_boundary(Pzx, dx, axis=1)
-        dPxy_dy = self.diff_central_periodic(Pxy, dy, axis=0)
-        dPyy_dy = self.diff_central_periodic(Pyy, dy, axis=0)
-        dPyz_dy = self.diff_central_periodic(Pyz, dy, axis=0)
+        dPxx_dx = self.diff_central_zero_boundary(Pxx, delta, axis=1)
+        dPxy_dx = self.diff_central_zero_boundary(Pxy, delta, axis=1)
+        dPzx_dx = self.diff_central_zero_boundary(Pzx, delta, axis=1)
+        dPxy_dy = self.diff_central_periodic(Pxy, delta, axis=0)
+        dPyy_dy = self.diff_central_periodic(Pyy, delta, axis=0)
+        dPyz_dy = self.diff_central_periodic(Pyz, delta, axis=0)
 
         divPi = np.stack(
             [
@@ -111,8 +156,30 @@ class DataAnalyzer(base.JobExecutor):
         )
 
         rhs = -np.cross(Gamma, B, axis=-1) + divPi
-        denom = Lambda
-        E_ohm = rhs / (denom[..., np.newaxis] + 1.0e-32)
+
+        base1, base2 = self.get_scaled_ohm_bases(delta)
+        E_ohm, info = ohm.solve_ohm_2d(
+            Lambda,
+            rhs,
+            c=self._ohm_c,
+            delta=delta,
+            base1=base1,
+            base2=base2,
+            bc_x="neumann",
+            return_info=True,
+        )
+
+        if info["status_1"] != 0 or info["status_2"] != 0:
+            residual_1 = info["residuals_1"][-1] if info["residuals_1"] else float("nan")
+            residual_2 = info["residuals_2"][-1] if info["residuals_2"] else float("nan")
+            print(
+                "Warning: Ohm CG did not fully converge"
+                f" at step={step}"
+                f" (status_1={info['status_1']}, status_2={info['status_2']},"
+                f" residual_1={residual_1:.3e}, residual_2={residual_2:.3e})"
+            )
+        if squeeze_leading:
+            E_ohm = E_ohm[np.newaxis, ...]
         return E_ohm
 
     def save(self, filename):
@@ -172,6 +239,7 @@ class DataAnalyzer(base.JobExecutor):
         dh = xc[1] - xc[0]
         xc = self.average1d(xc, num_average)
         yc = self.average1d(yc, num_average)
+        self.prepare_ohm_bases(Mx, My)
 
         # adjust the boundary
         xc[0] = xc[1] - dh * num_average
@@ -220,6 +288,8 @@ class DataAnalyzer(base.JobExecutor):
             # read data
             time = run.get_time_at(prefix, field_step[index])
             data = run.read_at(prefix, field_step[index])
+            dh_snapshot = data["xc"][1] - data["xc"][0]
+            delta = num_average * dh_snapshot
             uf = data["uf"].mean(axis=0)
             um = data["um"].mean(axis=0)
             je = um[..., 0, 0:4] * qme
@@ -239,11 +309,11 @@ class DataAnalyzer(base.JobExecutor):
             xmin = np.polyval(shock_position, time) + x_offset
             xnew = np.arange(Mx) * num_average * dh + xmin
             xind = xc.searchsorted(xnew)
-            delta = ((xc[xind] - xnew) / (xc[xind] - xc[xind - 1]))[np.newaxis, :, np.newaxis]
-            uf = delta * uf[..., xind - 1, :] + (1 - delta) * uf[..., xind, :]
-            j = delta * j[..., xind - 1, :] + (1 - delta) * j[..., xind, :]
-            m = delta * m[..., xind - 1, :] + (1 - delta) * m[..., xind, :]
-            e_ohm = self.calc_e_ohm(uf[..., 3:6], m, num_average * dh, num_average * dh)
+            xlerp = ((xc[xind] - xnew) / (xc[xind] - xc[xind - 1]))[np.newaxis, :, np.newaxis]
+            uf = xlerp * uf[..., xind - 1, :] + (1 - xlerp) * uf[..., xind, :]
+            j = xlerp * j[..., xind - 1, :] + (1 - xlerp) * j[..., xind, :]
+            m = xlerp * m[..., xind - 1, :] + (1 - xlerp) * m[..., xind, :]
+            e_ohm = self.calc_e_ohm(uf[..., 3:6], m, delta=delta, step=int(field_step[index]))
 
             # store data
             with h5py.File(filename, "a") as fp:

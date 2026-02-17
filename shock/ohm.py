@@ -50,6 +50,8 @@ def idx(i, j, Nx, Ny=None):
 
 def _periodic_second_difference_matrix(n):
     """Return periodic 1D second-difference matrix (n x n)."""
+    if n <= 1:
+        return sparse.csr_matrix((n, n))
     D = sparse.lil_matrix((n, n))
     D.setdiag(-2.0)
     D.setdiag(1.0, k=-1)
@@ -61,6 +63,8 @@ def _periodic_second_difference_matrix(n):
 
 def _periodic_first_difference_matrix(n):
     """Return periodic 1D first-difference matrix (n x n), no 1/(2Δ) factor."""
+    if n <= 1:
+        return sparse.csr_matrix((n, n))
     D = sparse.lil_matrix((n, n))
     D.setdiag(-1.0, k=-1)
     D.setdiag(1.0, k=1)
