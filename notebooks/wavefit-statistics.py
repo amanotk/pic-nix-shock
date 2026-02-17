@@ -25,12 +25,19 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    filename = "work/ma05-tbn80-run001//wavetool-field_burst1/wavefit-result.h5"
+    default_filename = "work/ma05-tbn80-run001/wavetool-field_burst1/wavefit-result.h5"
     fitfile = mo.ui.text(
         label="Wavefit results file",
-        placeholder="work/ma05-tbn80-run001//wavetool-field_burst1/wavefit-result.h5",
+        placeholder=default_filename,
         full_width=True,
     )
+    fitfile
+    return default_filename, fitfile
+
+
+@app.cell
+def _(default_filename, fitfile):
+    filename = fitfile.value.strip() or default_filename
     return (filename,)
 
 
@@ -99,14 +106,12 @@ def _(df_well_fitted, kk, plt, ww):
     k = df_well_fitted["k"]
     wc = df_well_fitted["wc"]
     wp = df_well_fitted["wp"]
-    Bw = df_well_fitted["Bw"]
-    Ew = df_well_fitted["Ew"]
 
     fig_disp = plt.figure(1)
-    plt.plot(+kk, ww[:,1], 'k--')
-    plt.plot(+kk, ww[:,1] + 0.10*kk, 'r--')
-    plt.plot(-kk, ww[:,1], 'k--')
-    plt.plot(-kk, ww[:,1] - 0.05*kk, 'r--')
+    plt.plot(+kk, ww[:, 1], "k--")
+    plt.plot(+kk, ww[:, 1] + 0.10 * kk, "r--")
+    plt.plot(-kk, ww[:, 1], "k--")
+    plt.plot(-kk, ww[:, 1] - 0.05 * kk, "r--")
     plt.scatter(k / wp, omega / wc, s=0.2, marker=".")
     plt.xlim(-1.0, +1.0)
     plt.ylim(+0.0, +0.5)
@@ -119,35 +124,28 @@ def _(df_well_fitted, kk, plt, ww):
 
 @app.cell
 def _(np, plt):
-    def lowfreq_em_para_wave_dispersion(k, **kwargs):
-      c   = kwargs.get('c')
-      wpe = kwargs.get('wpe')
-      wpi = kwargs.get('wpi')
-      wce = kwargs.get('wce')
-      wci = kwargs.get('wci')
+    def lowfreq_em_para_wave_dispersion(k, *, c, wpe, wpi, wce, wci):
+        w = np.zeros((len(k), 2))
+        for i in range(len(k)):
+            ki = (k[i] * c / wpi) ** 2
+            ke = (k[i] * c / wpe) ** 2
+            a2 = 1 + 1 / ki + 1 / ke
+            a1 = wci + wce
+            a0 = wci * wce
+            ww = np.sort(np.roots([a2, a1, a0]))
+            w[i, :] = ww
+        return w
 
-      w = np.zeros((N, 2))
-      for i in range(len(k)):
-        ki = (k[i] * c / wpi)**2
-        ke = (k[i] * c / wpe)**2
-        a2 = 1 + 1/ki + 1/ke
-        a1 = wci + wce
-        a0 = wci * wce
-        ww = np.sort(np.roots([a2, a1, a0]))
-        w[i,:] = ww
-      return w
-
-    c   = 1.0e+2
+    c = 1.0e2
     mie = 400
     vai = 1.0
     wci = 1.0
     wpi = c
-    vae = vai * np.sqrt(mie)
-    wce =-wci * mie
+    wce = -wci * mie
     wpe = wpi * np.sqrt(mie)
 
     N = 100
-    kk = np.geomspace(1.0e-1, 5.0e+2, N)
+    kk = np.geomspace(1.0e-1, 5.0e2, N)
     ww = lowfreq_em_para_wave_dispersion(kk, wpe=wpe, wce=wce, wpi=wpi, wci=wci, c=c)
 
     kk = kk / np.sqrt(mie)
@@ -160,11 +158,6 @@ def _(np, plt):
     plt.grid()
     fig_linear_disp
     return kk, ww
-
-
-@app.cell
-def _():
-    return
 
 
 if __name__ == "__main__":
