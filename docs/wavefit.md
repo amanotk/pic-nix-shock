@@ -63,6 +63,53 @@ If all the above conditions are applied, the model function reduces to:
 ```
 where we have introduced the notation: $E_w = f_1$ and $B_w = f_4$, $\phi_E = \phi_1$, and $\phi_B = \phi_4$.
 
+### Helicity and Polarization Conventions
+
+The model above defines the transverse electric field as
+```math
+E_1 = E_w \cos(k_x x + k_y y + \phi_E), \quad
+E_2 = h \, E_w \sin(k_x x + k_y y + \phi_E),
+```
+where $h = \pm 1$ is the **helicity** parameter (stored as `helicity` in the fit result).
+
+The transverse components are combined into a complex quantity
+```math
+E_\perp \equiv E_1 + i E_2,
+```
+so that:
+- $h = +1$ (right-hand helicity): $E_\perp \propto \cos\phi + i\sin\phi = e^{+i\phi}$
+- $h = -1$ (left-hand helicity):  $E_\perp \propto \cos\phi - i\sin\phi = e^{-i\phi}$
+
+This is a **spatial** definition: the handedness of the transverse vector as phase increases along the propagation direction at a fixed time (a "snapshot"). This follows the convention of Terasawa et al. [1], Appendix B, where right-hand helicity corresponds to the spatial factor $e^{+ikX}$ and left-hand helicity to $e^{-ikX}$.
+
+#### Relationship to Temporal Polarization
+
+The phase convention used in the model is $\phi = k_x x + k_y y$ (no explicit time dependence). If a time dependence of the form $e^{-i\omega t}$ is assumed, then:
+
+- **Right-hand helicity** ($h = +1$) with forward propagation ($k > 0$, $\omega > 0$) corresponds to **left-hand temporal polarization** at a fixed point.
+- This follows from Terasawa et al. [1], who note that the right-hand helical component propagating in the $+X$ direction is observed as left-hand polarized in time (their $L^+$ component).
+
+In other words, the sign of helicity and the sign of temporal polarization are opposite for forward-propagating waves when using the $\cos(kx-\omega t)$ phase convention.
+
+#### Reference
+
+[1] Terasawa, T., Hoshino, M., Sakai, J.-I., and Hada, T. (1986), "Decay instability of finite-amplitude circularly polarized Alfvén waves: A numerical simulation of stimulated Brillouin scattering," *J. Geophys. Res.*, 91(A4), 4171–4187, doi:10.1029/JA091iA04p04171. (See Appendix B for the helicity/spiral decomposition and the relation between spatial helicity and temporal polarization.)
+
+### Frequency and Wavenumber Conventions
+
+The wave frequency (`omega`) and wavenumber (`k`) returned by wavefit are defined such that:
+
+- **R-mode polarization**: `omega > 0` (corresponds to `omega < 0` → L-mode)
+- **Poynting flux sign**: `sign(omega / k)` corresponds to the sign of the Poynting flux
+
+The formulas used are:
+- `sign_k_dot_b = sign(kx*Bx + ky*By)`
+- `sign_phi_diff = sign(phiE - phiB)` (phase difference normalized to [-π, π])
+- `omega = - |k| * c * Ew/Bw * sign_k_dot_b * sign_phi_diff * helicity`
+- `k = -sign_k_dot_b * sqrt(kx^2 + ky^2) * helicity`
+
+where `c = 1` in normalized simulation units.
+
 ### Number of Free Parameters
 
 If we assume that the window function is fixed (i.e., $x_0$, $y_0$, $\sigma$ are given), the free parameters are as follows.

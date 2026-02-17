@@ -145,6 +145,7 @@ def test_wavefit_plot_diagnostic_tolerates_missing_support_fraction(temp_dir):
 
 
 def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
+    from shock.wavefit.cli import get_charges_from_parameter
     from shock.wavefit.fit import fit_one_candidate
     from shock.wavefit.model import build_xy, circular_model_cartesian
 
@@ -214,6 +215,8 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
         "good_lambda_factor_max": 4.0,
     }
 
+    qe, qi = get_charges_from_parameter({"nppc": 32, "wp": 1.0, "u0": 0.0125})
+
     result = fit_one_candidate(
         E,
         B,
@@ -225,6 +228,8 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
         options,
         B_background=B_background,
         J_background=J_background,
+        qe=qe,
+        qi=qi,
     )
     assert result["success"]
     assert result["nrmse_balanced"] < 0.4
@@ -233,17 +238,19 @@ def test_wavefit_fit_one_candidate_recovers_synthetic_wave():
     for key in ["kx_err", "ky_err", "Ew_err", "Bw_err", "phiE_err", "phiB_err"]:
         assert key in result
     assert "has_errorbars" in result
-    for key in ["Bx", "By", "Bz", "vex", "vey", "vez", "vix", "viy", "viz"]:
+    for key in ["Bx", "By", "Bz", "Vex", "Vey", "Vez", "Vix", "Viy", "Viz"]:
         assert key in result
     assert np.isclose(result["Bx"], 2.0)
     assert np.isclose(result["By"], -1.0)
     assert np.isclose(result["Bz"], 0.5)
-    assert np.isclose(result["vex"], ve_true[0])
-    assert np.isclose(result["vey"], ve_true[1])
-    assert np.isclose(result["vez"], ve_true[2])
-    assert np.isclose(result["vix"], vi_true[0])
-    assert np.isclose(result["viy"], vi_true[1])
-    assert np.isclose(result["viz"], vi_true[2])
+    assert np.isclose(result["Vex"], ve_true[0])
+    assert np.isclose(result["Vey"], ve_true[1])
+    assert np.isclose(result["Vez"], ve_true[2])
+    assert np.isclose(result["Vix"], vi_true[0])
+    assert np.isclose(result["Viy"], vi_true[1])
+    assert np.isclose(result["Viz"], vi_true[2])
+    assert np.isclose(result["Ne"], Je0 / qe)
+    assert np.isclose(result["Ni"], Ji0 / qi)
 
 
 def test_wavefit_patch_coordinates_are_contiguous_across_y_boundary():
@@ -363,3 +370,147 @@ def test_wavefit_plot_job_writes_envelope_maps(temp_dir, monkeypatch):
     out_png = work_dir / "wavefit-envelope-0000.png"
     assert out_png.exists()
     assert out_png.stat().st_size > 0
+
+
+def test_wavefit_get_charges_from_parameter():
+    from shock.wavefit.cli import get_charges_from_parameter
+
+    parameter = {"nppc": 32, "wp": 1.0, "u0": 0.0125}
+    qe, qi = get_charges_from_parameter(parameter)
+
+    assert qe < 0
+    assert qi > 0
+    assert np.isclose(qi, -qe)
+
+    gamma = np.sqrt(1.0 + 0.0125**2)
+    expected_qe = -1.0 / 32 * np.sqrt(gamma)
+    assert np.isclose(qe, expected_qe)
+
+
+def test_wavefit_density_conversion():
+    from shock.wavefit.fit import weighted_local_mean_velocity
+
+    Je_patch = np.array([[[-5.0, 0.01, 0.02, 0.03]]])
+    W = np.array([[1.0]])
+    qe = -0.03125
+
+    vx, vy, vz, ne = weighted_local_mean_velocity(Je_patch, W, qe)
+
+    assert ne > 0
+    assert np.isclose(ne, -5.0 / qe)
+
+
+def test_wavefit_io_helicity_and_omega(temp_dir):
+    import h5py
+
+    from shock.wavefit.io import read_wavefit_results
+
+    h5_path = temp_dir / "wavefit-result.h5"
+    with h5py.File(h5_path, "w") as fp:
+        grp = fp.create_group("snapshots/00000010")
+        grp.attrs["step"] = 10
+        grp.attrs["t"] = 2.5
+        grp.create_dataset("kx", data=np.array([0.1]))
+        grp.create_dataset("ky", data=np.array([0.8]))
+        grp.create_dataset("Ew", data=np.array([0.2]))
+        grp.create_dataset("Bw", data=np.array([0.3]))
+        grp.create_dataset("phiE", data=np.array([np.pi / 2]))
+        grp.create_dataset("phiB", data=np.array([0.0]))
+        grp.create_dataset("helicity", data=np.array([1.0]))
+        grp.create_dataset("Ne", data=np.array([100.0]))
+        grp.create_dataset("Ni", data=np.array([100.0]))
+        grp.create_dataset("Bx", data=np.array([1.0]))
+        grp.create_dataset("By", data=np.array([-0.5]))
+        grp.create_dataset("Bz", data=np.array([0.0]))
+
+    results = read_wavefit_results(str(h5_path))
+
+    assert results["omega"][0] > 0
+    assert np.isclose(results["wp"][0], 10.0)
+    assert np.isclose(results["wc"][0], np.sqrt(1.0**2 + 0.5**2))
+
+
+def test_wavefit_omega_sign_with_helicity(temp_dir):
+    import h5py
+
+    from shock.wavefit.io import read_wavefit_results
+
+    h5_path1 = temp_dir / "wavefit1.h5"
+    with h5py.File(h5_path1, "w") as fp:
+        grp = fp.create_group("snapshots/00000010")
+        grp.attrs["step"] = 10
+        grp.attrs["t"] = 2.5
+        grp.create_dataset("kx", data=np.array([0.1]))
+        grp.create_dataset("ky", data=np.array([0.8]))
+        grp.create_dataset("Ew", data=np.array([0.2]))
+        grp.create_dataset("Bw", data=np.array([0.3]))
+        grp.create_dataset("phiE", data=np.array([np.pi / 2]))
+        grp.create_dataset("phiB", data=np.array([0.0]))
+        grp.create_dataset("helicity", data=np.array([1.0]))
+        grp.create_dataset("Bx", data=np.array([1.0]))
+        grp.create_dataset("By", data=np.array([-0.5]))
+
+    results1 = read_wavefit_results(str(h5_path1))
+    assert results1["omega"][0] > 0
+
+    h5_path2 = temp_dir / "wavefit2.h5"
+    with h5py.File(h5_path2, "w") as fp:
+        grp = fp.create_group("snapshots/00000010")
+        grp.attrs["step"] = 10
+        grp.attrs["t"] = 2.5
+        grp.create_dataset("kx", data=np.array([0.1]))
+        grp.create_dataset("ky", data=np.array([0.8]))
+        grp.create_dataset("Ew", data=np.array([0.2]))
+        grp.create_dataset("Bw", data=np.array([0.3]))
+        grp.create_dataset("phiE", data=np.array([np.pi / 2]))
+        grp.create_dataset("phiB", data=np.array([0.0]))
+        grp.create_dataset("helicity", data=np.array([-1.0]))
+        grp.create_dataset("Bx", data=np.array([1.0]))
+        grp.create_dataset("By", data=np.array([-0.5]))
+
+    results2 = read_wavefit_results(str(h5_path2))
+    assert results2["omega"][0] < 0
+
+
+def test_wavefit_io_valid_field(temp_dir):
+    import h5py
+
+    from shock.wavefit.io import read_wavefit_results
+
+    h5_path_valid = temp_dir / "wavefit-valid.h5"
+    with h5py.File(h5_path_valid, "w") as fp:
+        grp = fp.create_group("snapshots/00000010")
+        grp.attrs["step"] = 10
+        grp.attrs["t"] = 2.5
+        grp.create_dataset("kx", data=np.array([0.1]))
+        grp.create_dataset("ky", data=np.array([0.8]))
+        grp.create_dataset("Ew", data=np.array([0.2]))
+        grp.create_dataset("Bw", data=np.array([0.3]))
+        grp.create_dataset("phiE", data=np.array([np.pi / 2]))
+        grp.create_dataset("phiB", data=np.array([0.0]))
+        grp.create_dataset("helicity", data=np.array([1.0]))
+        grp.create_dataset("Bx", data=np.array([1.0]))
+        grp.create_dataset("By", data=np.array([-0.5]))
+
+    results_valid = read_wavefit_results(str(h5_path_valid))
+    assert results_valid["valid"][0] == True
+
+    h5_path_invalid = temp_dir / "wavefit-invalid.h5"
+    with h5py.File(h5_path_invalid, "w") as fp:
+        grp = fp.create_group("snapshots/00000010")
+        grp.attrs["step"] = 10
+        grp.attrs["t"] = 2.5
+        grp.create_dataset("kx", data=np.array([0.1]))
+        grp.create_dataset("ky", data=np.array([0.8]))
+        grp.create_dataset("Ew", data=np.array([0.2]))
+        grp.create_dataset("Bw", data=np.array([0.3]))
+        grp.create_dataset("phiE", data=np.array([np.pi / 2]))
+        grp.create_dataset("phiB", data=np.array([0.0]))
+        grp.create_dataset("helicity", data=np.array([1.0]))
+        grp.create_dataset("Bx", data=np.array([1.0]))
+        grp.create_dataset("By", data=np.array([-0.5]))
+        grp.create_dataset("Ne", data=np.array([100.0]))
+        grp.create_dataset("Ni", data=np.array([100.0]))
+
+    results_invalid = read_wavefit_results(str(h5_path_invalid))
+    assert "valid" in results_invalid

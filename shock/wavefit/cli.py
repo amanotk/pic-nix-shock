@@ -14,9 +14,12 @@ import tqdm
 try:
     from mpi4py import MPI  # type: ignore[import-not-found]
     from mpi4py.futures import MPICommExecutor  # type: ignore[import-not-found]
+
+    MPI_IMPORT_ERROR = None
 except Exception:
     MPI = None
     MPICommExecutor = None
+    MPI_IMPORT_ERROR = sys.exc_info()[1]
 
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
@@ -50,6 +53,7 @@ RESULT_FLOAT_KEYS = [
     "nrmseE",
     "nrmseB",
     "nrmse_raw",
+    "helicity",
     "k",
     "wavelength",
     "wavelength_over_sigma",
@@ -62,12 +66,14 @@ RESULT_FLOAT_KEYS = [
     "Bx",
     "By",
     "Bz",
-    "vex",
-    "vey",
-    "vez",
-    "vix",
-    "viy",
-    "viz",
+    "Vex",
+    "Vey",
+    "Vez",
+    "Vix",
+    "Viy",
+    "Viz",
+    "Ne",
+    "Ni",
 ]
 RESULT_INT_KEYS = ["ix", "iy", "nfev"]
 RESULT_BOOL_KEYS = ["success", "is_good", "is_good_nrmse", "is_good_scale", "has_errorbars"]
@@ -86,6 +92,24 @@ def decode_embedded_config(config_dataset_value):
     data = np.asarray(config_dataset_value)
     payload = data.astype(np.uint8).tobytes()
     return pickle.loads(payload)
+
+
+def get_charges_from_parameter(parameter):
+    """Compute electron and ion charges from parameter dict.
+
+    In normalized simulation units:
+        gamma = sqrt(1 + u0^2)   (cc = 1)
+        me = 1 / nppc
+        qe = -wp / nppc * sqrt(gamma)   (electron charge, negative)
+        qi = -qe   (ion charge, positive)
+    """
+    nppc = parameter.get("nppc", 1)
+    wp = parameter.get("wp", 1.0)
+    u0 = parameter.get("u0", 0.0)
+    gamma = np.sqrt(1.0 + u0**2)
+    qe = -wp / nppc * np.sqrt(gamma)
+    qi = -qe
+    return qe, qi
 
 
 def extract_parameter_from_wavefile(fileobj):
@@ -124,9 +148,31 @@ def get_h5_group(fileobj, key):
 
 
 def get_mpi_size_rank():
+    # If mpi4py failed to import but we're running under mpiexec,
+    # try to get size from environment variable
     if MPI is None:
+        # Check for OpenMPI or other MPI implementations
+        size_env = os.environ.get("OMPI_COMM_WORLD_SIZE") or os.environ.get("PMI_SIZE")
+        if size_env:
+            try:
+                size = int(size_env)
+                rank_env = (
+                    os.environ.get("OMPI_COMM_WORLD_RANK")
+                    or os.environ.get("PMI_RANK")
+                    or os.environ.get("SLURM_PROCID", "0")
+                )
+                rank = int(rank_env)
+                return size, rank
+            except ValueError:
+                pass
         return 1, 0
     return MPI.COMM_WORLD.Get_size(), MPI.COMM_WORLD.Get_rank()
+
+
+def mpi_import_error_message():
+    if MPI_IMPORT_ERROR is None:
+        return ""
+    return "{}: {}".format(type(MPI_IMPORT_ERROR).__name__, MPI_IMPORT_ERROR)
 
 
 def is_root_rank():
@@ -142,7 +188,9 @@ def format_progress_line(completed, total):
     return "{}/{} ({:5.1f}%) remaining={}".format(completed, total, percent, remaining)
 
 
-def fit_single_snapshot_worker(E, B, xx, yy, b0, options, B_background=None, J_background=None):
+def fit_single_snapshot_worker(
+    E, B, xx, yy, b0, options, B_background=None, J_background=None, qe=None, qi=None
+):
     fit_options = dict(options)
     if bool(options.get("debug", False)):
         fit_options.setdefault("max_candidates", 32)
@@ -168,6 +216,8 @@ def fit_single_snapshot_worker(E, B, xx, yy, b0, options, B_background=None, J_b
             fit_options,
             B_background=B_background,
             J_background=J_background,
+            qe=qe,
+            qi=qi,
         )
         fit_result["ix"] = int(ix)
         fit_result["iy"] = int(iy)
@@ -195,8 +245,17 @@ def analyze_snapshot_worker(task):
     raw_index = task.get("raw_index", None)
     b0 = float(task["b0"])
     options = dict(task["options"])
+    parameter = task.get("parameter", None)
+
+    qe, qi = None, None
+    if parameter is not None:
+        qe, qi = get_charges_from_parameter(parameter)
 
     with h5py.File(wavefile, "r") as fp_wave:
+        if parameter is None:
+            parameter = extract_parameter_from_wavefile(fp_wave)
+            if parameter is not None:
+                qe, qi = get_charges_from_parameter(parameter)
         wave_step_ds = get_h5_dataset(fp_wave, "step")
         wave_t_ds = get_h5_dataset(fp_wave, "t")
         wave_x_ds = get_h5_dataset(fp_wave, "x")
@@ -234,6 +293,8 @@ def analyze_snapshot_worker(task):
         options,
         B_background=B_background,
         J_background=J_background,
+        qe=qe,
+        qi=qi,
     )
     cleanup_large_arrays_in_result(result)
     return {
@@ -412,7 +473,9 @@ class WaveFitAnalyzer(base.JobExecutor):
             raise ValueError("No snapshots selected. Adjust debug settings.")
         return snapshot_indices
 
-    def fit_single_snapshot(self, E, B, xx, yy, b0, B_background=None, J_background=None):
+    def fit_single_snapshot(
+        self, E, B, xx, yy, b0, B_background=None, J_background=None, qe=None, qi=None
+    ):
         fit_options = dict(self.options)
         if bool(self.options.get("debug", False)):
             fit_options.setdefault("max_candidates", 32)
@@ -438,6 +501,8 @@ class WaveFitAnalyzer(base.JobExecutor):
                 fit_options,
                 B_background=B_background,
                 J_background=J_background,
+                qe=qe,
+                qi=qi,
             )
             fit_result["ix"] = int(ix)
             fit_result["iy"] = int(iy)
@@ -598,6 +663,10 @@ class WaveFitAnalyzer(base.JobExecutor):
                 b0 = self.get_reference_b0(parameter)
                 wci = self.get_wci(parameter)
 
+                qe, qi = None, None
+                if parameter is not None:
+                    qe, qi = get_charges_from_parameter(parameter)
+
                 rawfile_opt = self.options.get("rawfile", "wavetool")
                 rawfile = self.get_filename(rawfile_opt, ".h5") if rawfile_opt else None
                 step_to_raw_index = {}
@@ -616,12 +685,26 @@ class WaveFitAnalyzer(base.JobExecutor):
 
                 nstep = int(wave_step_ds.shape[0])
                 snapshot_indices = self.select_snapshot_indices(nstep)
+                total_tasks = int(snapshot_indices.size)
+                use_tqdm = sys.stderr.isatty()
 
-                for snapshot_index in tqdm.tqdm(
-                    snapshot_indices,
-                    desc="analyze(serial)",
-                    disable=not is_root_rank(),
-                ):
+                if use_tqdm:
+                    iterator = tqdm.tqdm(
+                        snapshot_indices,
+                        desc="analyze(serial)",
+                        disable=not is_root_rank(),
+                    )
+                else:
+                    iterator = snapshot_indices
+                    if is_root_rank():
+                        print(
+                            "[wavefit] analyze(serial) {}".format(
+                                format_progress_line(0, total_tasks)
+                            ),
+                            flush=True,
+                        )
+
+                for completed, snapshot_index in enumerate(iterator, start=1):
                     step = int(wave_step_ds[snapshot_index])
                     time = float(wave_t_ds[snapshot_index])
 
@@ -652,11 +735,21 @@ class WaveFitAnalyzer(base.JobExecutor):
                         b0,
                         B_background=B_background,
                         J_background=J_background,
+                        qe=qe,
+                        qi=qi,
                     )
                     if debug:
                         self.generate_diagnostics(result, x, y, step, time=time, wci=wci)
                     self.cleanup_large_arrays(result)
                     self.write_snapshot_result(fp_fit, step, time, result)
+
+                    if not use_tqdm and is_root_rank():
+                        print(
+                            "[wavefit] analyze(serial) {}".format(
+                                format_progress_line(completed, total_tasks)
+                            ),
+                            flush=True,
+                        )
         finally:
             if fp_raw is not None:
                 fp_raw.close()
@@ -714,6 +807,7 @@ class WaveFitAnalyzer(base.JobExecutor):
                             "raw_index": step_to_raw_index.get(step, None),
                             "b0": b0,
                             "options": dict(self.options),
+                            "parameter": parameter,
                         }
                     )
 
@@ -988,8 +1082,29 @@ def main():
     mpi_size, mpi_rank = get_mpi_size_rank()
     for job in jobs:
         if job == "analyze":
-            if mpi_rank == 0:
+            # Only print from non-MPI or root rank
+            if mpi_size == 1 or mpi_rank == 0:
                 print("[wavefit] running analyze", flush=True)
+            if mpi_size > 1 and (MPI is None or MPICommExecutor is None):
+                if mpi_rank == 0:
+                    detail = mpi_import_error_message()
+                    print(
+                        "[wavefit] warning: mpi4py is unavailable; "
+                        "falling back to root-only serial analyze",
+                        flush=True,
+                    )
+                    if detail:
+                        print(
+                            "[wavefit] mpi import error: {}".format(detail),
+                            flush=True,
+                        )
+                    print(
+                        "[wavefit] hint: ensure MPI runtime libs are visible "
+                        "(e.g., use scripts/mpi-wavefit.sh or set LD_LIBRARY_PATH)",
+                        flush=True,
+                    )
+                if mpi_rank != 0:
+                    continue
             obj = WaveFitAnalyzer(config)
             apply_runtime_options(obj)
             if mpi_size > 1 and debug and mpi_rank != 0:

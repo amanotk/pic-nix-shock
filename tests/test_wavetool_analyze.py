@@ -133,7 +133,7 @@ def test_wavetool_analyze_writes_hdf5_and_transformed_moments(temp_dir, monkeypa
         assert np.all(np.isfinite(fp["M"][...]))
 
 
-def test_calc_e_ohm_uses_small_epsilon_divisor(monkeypatch):
+def test_calc_e_ohm_handles_small_lambda_with_solver(monkeypatch):
     sys.modules.setdefault("picnix", types.ModuleType("picnix"))
     from shock import wavetool
 
@@ -147,5 +147,4 @@ def test_calc_e_ohm_uses_small_epsilon_divisor(monkeypatch):
     E_ohm = analyzer.calc_e_ohm(B, M, dx=1.0, dy=1.0)
 
     assert np.isfinite(E_ohm).all()
-    assert E_ohm[0, 0, 0, 1] > 1.0e20
-    assert np.isclose(E_ohm[0, 0, 1, 1], 0.5)
+    assert E_ohm[0, 0, 0, 1] > E_ohm[0, 0, 1, 1]

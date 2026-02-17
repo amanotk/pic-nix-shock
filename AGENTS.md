@@ -18,6 +18,13 @@ This document is based only on files currently tracked by git.
 
 - This repository is primarily intended for OpenCode-style agent workflows.
 
+## Git Operations
+
+- **DO NOT commit or push any changes without explicit instruction from the user.**
+- If you create new files that should be committed, ask the user first.
+- Always verify the changes with `git diff` before committing.
+- Follow the commit message style used in this repository.
+
 ## Repository Size and File-Reading Policy
 
 - This workspace may contain a very large number of files outside the git-tracked source tree.

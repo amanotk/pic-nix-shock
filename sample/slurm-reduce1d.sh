@@ -14,7 +14,29 @@
 
 export PICNIX_DIR=${HOME}/pic-nix
 
-. .shock.env
+if [[ -n "${SLURM_SUBMIT_DIR:-}" && -f "${SLURM_SUBMIT_DIR}/.shock.env" ]]; then
+    REPO_ROOT="${SLURM_SUBMIT_DIR}"
+else
+    SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    CANDIDATE_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+    if [[ -f "${CANDIDATE_ROOT}/.shock.env" ]]; then
+        REPO_ROOT="${CANDIDATE_ROOT}"
+    else
+        echo "ERROR: Could not locate repo root (.shock.env not found)." >&2
+        echo "       Submit from repo root or export SHOCK_ENV_FILE explicitly." >&2
+        exit 1
+    fi
+fi
+
+cd "${REPO_ROOT}" || exit 1
+
+. "${REPO_ROOT}/.shock.env"
+
+if command -v uv >/dev/null 2>&1; then
+    PYTHON_CMD=(uv run python)
+else
+    PYTHON_CMD=(python)
+fi
 
 if [[ $# -eq 0 ]]; then
     echo "ERROR: at least one run name argument required" >&2
@@ -25,5 +47,5 @@ fi
 ulimit -n 4096
 for RUN in "$@"; do
     TOML="${SHOCK_WORK_ROOT}/${RUN}/reduce1d-config.toml"
-    python ./shock/reduce1d.py -j analyze,plot "${TOML}"
+    "${PYTHON_CMD[@]}" -m shock.reduce1d -j analyze,plot "${TOML}"
 done
