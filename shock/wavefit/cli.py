@@ -5,6 +5,7 @@ import os
 import pathlib
 import pickle
 import sys
+from typing import Union
 
 import h5py
 import numpy as np
@@ -14,9 +15,12 @@ import tqdm
 try:
     from mpi4py import MPI  # type: ignore[import-not-found]
     from mpi4py.futures import MPICommExecutor  # type: ignore[import-not-found]
+
+    MPI_IMPORT_ERROR = None
 except Exception:
     MPI = None
     MPICommExecutor = None
+    MPI_IMPORT_ERROR = sys.exc_info()[1]
 
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
@@ -164,6 +168,12 @@ def get_mpi_size_rank():
                 pass
         return 1, 0
     return MPI.COMM_WORLD.Get_size(), MPI.COMM_WORLD.Get_rank()
+
+
+def mpi_import_error_message():
+    if MPI_IMPORT_ERROR is None:
+        return ""
+    return "{}: {}".format(type(MPI_IMPORT_ERROR).__name__, MPI_IMPORT_ERROR)
 
 
 def is_root_rank():
@@ -676,12 +686,26 @@ class WaveFitAnalyzer(base.JobExecutor):
 
                 nstep = int(wave_step_ds.shape[0])
                 snapshot_indices = self.select_snapshot_indices(nstep)
+                total_tasks = int(snapshot_indices.size)
+                use_tqdm = sys.stderr.isatty()
 
-                for snapshot_index in tqdm.tqdm(
-                    snapshot_indices,
-                    desc="analyze(serial)",
-                    disable=not is_root_rank(),
-                ):
+                if use_tqdm:
+                    iterator = tqdm.tqdm(
+                        snapshot_indices,
+                        desc="analyze(serial)",
+                        disable=not is_root_rank(),
+                    )
+                else:
+                    iterator = snapshot_indices
+                    if is_root_rank():
+                        print(
+                            "[wavefit] analyze(serial) {}".format(
+                                format_progress_line(0, total_tasks)
+                            ),
+                            flush=True,
+                        )
+
+                for completed, snapshot_index in enumerate(iterator, start=1):
                     step = int(wave_step_ds[snapshot_index])
                     time = float(wave_t_ds[snapshot_index])
 
@@ -719,6 +743,14 @@ class WaveFitAnalyzer(base.JobExecutor):
                         self.generate_diagnostics(result, x, y, step, time=time, wci=wci)
                     self.cleanup_large_arrays(result)
                     self.write_snapshot_result(fp_fit, step, time, result)
+
+                    if not use_tqdm and is_root_rank():
+                        print(
+                            "[wavefit] analyze(serial) {}".format(
+                                format_progress_line(completed, total_tasks)
+                            ),
+                            flush=True,
+                        )
         finally:
             if fp_raw is not None:
                 fp_raw.close()
@@ -1054,6 +1086,26 @@ def main():
             # Only print from non-MPI or root rank
             if mpi_size == 1 or mpi_rank == 0:
                 print("[wavefit] running analyze", flush=True)
+            if mpi_size > 1 and (MPI is None or MPICommExecutor is None):
+                if mpi_rank == 0:
+                    detail = mpi_import_error_message()
+                    print(
+                        "[wavefit] warning: mpi4py is unavailable; "
+                        "falling back to root-only serial analyze",
+                        flush=True,
+                    )
+                    if detail:
+                        print(
+                            "[wavefit] mpi import error: {}".format(detail),
+                            flush=True,
+                        )
+                    print(
+                        "[wavefit] hint: ensure MPI runtime libs are visible "
+                        "(e.g., use scripts/mpi-wavefit.sh or set LD_LIBRARY_PATH)",
+                        flush=True,
+                    )
+                if mpi_rank != 0:
+                    continue
             obj = WaveFitAnalyzer(config)
             apply_runtime_options(obj)
             if mpi_size > 1 and debug and mpi_rank != 0:
