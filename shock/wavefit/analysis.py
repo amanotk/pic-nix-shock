@@ -7,8 +7,8 @@ This module provides functions to analyze and compute statistics
 from wavefit fitting results (pandas DataFrames).
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 def filter_valid(df):

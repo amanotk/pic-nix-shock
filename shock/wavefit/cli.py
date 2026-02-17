@@ -5,7 +5,6 @@ import os
 import pathlib
 import pickle
 import sys
-from typing import Union
 
 import h5py
 import numpy as np

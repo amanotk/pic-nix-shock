@@ -81,7 +81,14 @@ def weighted_local_mean_velocity(current_patch, weight_patch, species_charge):
     velocity = current / (density[..., np.newaxis] + 1.0e-32)
     mean_vel = weighted_local_mean_vector(velocity, weight_patch)
     mean_density = weighted_local_mean_scalar(density, weight_patch)
-    mean_density = mean_density / species_charge
+    if species_charge is None:
+        mean_density = np.nan
+    else:
+        q = float(species_charge)
+        if q == 0.0 or not np.isfinite(q):
+            mean_density = np.nan
+        else:
+            mean_density = mean_density / q
     return (*mean_vel, mean_density)
 
 

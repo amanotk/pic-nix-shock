@@ -1,20 +1,16 @@
 import marimo
 
 __generated_with = "0.19.11"
-app = marimo.App(
-    width="medium",
-    layout_file="layouts/wavefit-statistics.slides.json",
-)
+app = marimo.App(width="medium")
 
 
 @app.cell
 def _():
     import marimo as mo
-    import pandas as pd
-    import numpy as np
     import matplotlib.pyplot as plt
+    import numpy as np
 
-    return mo, plt
+    return mo, np, plt
 
 
 @app.cell
@@ -42,15 +38,9 @@ def _(mo):
 def _(filename):
     from shock.wavefit import read_wavefit_results
     from shock.wavefit.analysis import (
-        filter_valid,
-        add_phase_speed,
         add_k_magnitude,
-        overview_stats,
-        fitting_statistics,
-        wave_statistics,
-        background_statistics,
-        helicity_counts,
-        mode_counts,
+        add_phase_speed,
+        filter_valid,
     )
 
     df = read_wavefit_results(filename)
@@ -68,7 +58,7 @@ def _(df):
 
 @app.cell
 def _(df):
-    df_well_fitted = df[df["nrmse_balanced"] < 0.5]
+    df_well_fitted = df[df["nrmse_balanced"] < 0.4]
     df_well_fitted
     return (df_well_fitted,)
 
@@ -104,20 +94,76 @@ def _(mo):
 
 
 @app.cell
-def _(df_well_fitted, plt):
+def _(df_well_fitted, kk, plt, ww):
     omega = df_well_fitted["omega"]
     k = df_well_fitted["k"]
     wc = df_well_fitted["wc"]
     wp = df_well_fitted["wp"]
+    Bw = df_well_fitted["Bw"]
+    Ew = df_well_fitted["Ew"]
 
     fig_disp = plt.figure(1)
-    plt.scatter(k / wp, omega / wc, marker=".")
+    plt.plot(+kk, ww[:,1], 'k--')
+    plt.plot(+kk, ww[:,1] + 0.10*kk, 'r--')
+    plt.plot(-kk, ww[:,1], 'k--')
+    plt.plot(-kk, ww[:,1] - 0.05*kk, 'r--')
+    plt.scatter(k / wp, omega / wc, s=0.2, marker=".")
     plt.xlim(-1.0, +1.0)
     plt.ylim(+0.0, +0.5)
     plt.ylabel(r"$\omega / \Omega_{ce}$")
     plt.xlabel(r"$k c / \omega_{pe}$")
     plt.grid()
     fig_disp
+    return
+
+
+@app.cell
+def _(np, plt):
+    def lowfreq_em_para_wave_dispersion(k, **kwargs):
+      c   = kwargs.get('c')
+      wpe = kwargs.get('wpe')
+      wpi = kwargs.get('wpi')
+      wce = kwargs.get('wce')
+      wci = kwargs.get('wci')
+
+      w = np.zeros((N, 2))
+      for i in range(len(k)):
+        ki = (k[i] * c / wpi)**2
+        ke = (k[i] * c / wpe)**2
+        a2 = 1 + 1/ki + 1/ke
+        a1 = wci + wce
+        a0 = wci * wce
+        ww = np.sort(np.roots([a2, a1, a0]))
+        w[i,:] = ww
+      return w
+
+    c   = 1.0e+2
+    mie = 400
+    vai = 1.0
+    wci = 1.0
+    wpi = c
+    vae = vai * np.sqrt(mie)
+    wce =-wci * mie
+    wpe = wpi * np.sqrt(mie)
+
+    N = 100
+    kk = np.geomspace(1.0e-1, 5.0e+2, N)
+    ww = lowfreq_em_para_wave_dispersion(kk, wpe=wpe, wce=wce, wpi=wpi, wci=wci, c=c)
+
+    kk = kk / np.sqrt(mie)
+    ww = ww / mie
+
+    fig_linear_disp = plt.figure()
+    plt.plot(kk, ww)
+    plt.xlim(0.0, 1.0)
+    plt.ylim(0.0, 0.5)
+    plt.grid()
+    fig_linear_disp
+    return kk, ww
+
+
+@app.cell
+def _():
     return
 
 

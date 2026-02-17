@@ -113,7 +113,7 @@ if MPICC_BIN="$(resolve_binary "${MPICC:-}" mpicc)"; then
     # Extract -L<path> from mpicc --showme:link output
     MPI_LIB_PATH="$($MPICC_BIN --showme:link 2>/dev/null | grep -oP -- '-L\K[^ ]+' | head -1)"
     if [ -n "$MPI_LIB_PATH" ] && [ -d "$MPI_LIB_PATH" ]; then
-        export LD_LIBRARY_PATH="$MPI_LIB_PATH:$LD_LIBRARY_PATH"
+        export LD_LIBRARY_PATH="$MPI_LIB_PATH:${LD_LIBRARY_PATH:-}"
     fi
 fi
 
