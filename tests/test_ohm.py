@@ -33,6 +33,14 @@ def test_solve_ohm_2d_shape_validation():
         ohm.solve_ohm_2d(L, np.zeros((7, 8, 3)), c, delta)
 
 
+def test_solve_ohm_2d_bc_x_validation():
+    """Test solve_ohm_2d rejects unsupported x-boundary names."""
+    L = np.ones((8, 8))
+    S = np.zeros((8, 8, 3))
+    with pytest.raises(ValueError, match="bc_x must be one of"):
+        ohm.solve_ohm_2d(L, S, c=1.0, delta=1.0, bc_x="invalid")
+
+
 def test_solve_ohm_2d_with_precomputed_bases_matches_default():
     """Test optional base-matrix injection path matches default solver path."""
     Nx, Ny = 8, 8
@@ -104,6 +112,69 @@ def test_solve_ohm_2d_with_external_preconditioners_matches_default():
     np.testing.assert_allclose(E_ext, E_ref, rtol=1e-8, atol=1e-10)
 
 
+@pytest.mark.parametrize("bc_x", ["periodic", "neumann"])
+def test_assembled_matrices_are_symmetric(bc_x):
+    """A1 and A2 should be symmetric for supported x-boundary modes."""
+    Nx, Ny = 9, 7
+    c = 1.0
+    delta = 1.0
+    c2_dx2 = c * c / (delta * delta)
+    c2_dx4 = c * c / (4.0 * delta * delta)
+
+    x = np.arange(Nx)
+    y = np.arange(Ny)
+    xx = np.broadcast_to(x, (Ny, Nx))
+    yy = np.broadcast_to(y[:, None], (Ny, Nx))
+    L = 1.0 + 0.1 * np.cos(2 * np.pi * xx / Nx) + 0.05 * np.sin(2 * np.pi * yy / Ny)
+
+    base1, base2 = ohm.build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4, bc_x=bc_x)
+    A_1 = ohm.assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=base1, bc_x=bc_x)
+    A_2 = ohm.assemble_matrix_2(Nx, Ny, L, c2_dx2, base=base2, bc_x=bc_x)
+
+    asym1 = (A_1 - A_1.T).tocoo()
+    asym2 = (A_2 - A_2.T).tocoo()
+    if asym1.nnz:
+        assert np.max(np.abs(asym1.data)) < 1e-14
+    if asym2.nnz:
+        assert np.max(np.abs(asym2.data)) < 1e-14
+
+
+@pytest.mark.parametrize("Nx,Ny", [(8, 8), (12, 16), (16, 12)])
+@pytest.mark.parametrize("mx,my", [(1, 1), (2, 3), (3, 2)])
+def test_ez_fourier_neumann_x_periodic_y(Nx, Ny, mx, my):
+    """Test Ez solver against Neumann-x / periodic-y Fourier formula."""
+    delta = 1.0
+    c = 1.0
+    c2 = c * c
+
+    L_val = 0.5
+    L = np.full((Ny, Nx), L_val)
+
+    x = (np.arange(Nx) + 0.5) * delta
+    y = np.arange(Ny) * delta
+    xx = np.broadcast_to(x, (Ny, Nx))
+    yy = np.broadcast_to(y[:, None], (Ny, Nx))
+
+    kx = np.pi * mx / (Nx * delta)
+    ky = 2.0 * np.pi * my / (Ny * delta)
+
+    Ez0 = 0.8
+    E_true = np.zeros((Ny, Nx, 3))
+    E_true[..., 2] = Ez0 * np.cos(kx * xx) * np.cos(ky * yy)
+
+    eigenvalue = L_val + 4.0 * c2 / (delta * delta) * (
+        np.sin(np.pi * mx / (2.0 * Nx)) ** 2 + np.sin(np.pi * my / Ny) ** 2
+    )
+
+    S = np.zeros((Ny, Nx, 3))
+    S[..., 2] = eigenvalue * E_true[..., 2]
+
+    E_solved = ohm.solve_ohm_2d(L, S, c, delta, bc_x="neumann")
+
+    rel_err_Ez = np.max(np.abs(E_solved[..., 2] - E_true[..., 2])) / np.max(np.abs(E_true[..., 2]))
+    assert rel_err_Ez < 1e-10, f"Ez relative error {rel_err_Ez:.2e} exceeds tolerance"
+
+
 class TestFourierVerification:
     """
     Test periodic boundary conditions using discrete Fourier verification for Ez only.
@@ -146,7 +217,7 @@ class TestFourierVerification:
         S = np.zeros((Ny, Nx, 3))
         S[..., 2] = eigenvalue * E_true[..., 2]
 
-        E_solved = ohm.solve_ohm_2d(L, S, c, delta)
+        E_solved = ohm.solve_ohm_2d(L, S, c, delta, bc_x="periodic")
 
         rel_err_Ez = np.max(np.abs(E_solved[..., 2] - E_true[..., 2])) / np.max(
             np.abs(E_true[..., 2])
@@ -190,7 +261,7 @@ class TestFourierVerification:
         S[..., 0] = A_xx * E_true[..., 0] + A_xy * E_true[..., 1]
         S[..., 1] = A_xy * E_true[..., 0] + A_yy * E_true[..., 1]
 
-        E_solved = ohm.solve_ohm_2d(L, S, c, delta)
+        E_solved = ohm.solve_ohm_2d(L, S, c, delta, bc_x="periodic")
 
         rel_err_Ex = np.max(np.abs(E_solved[..., 0] - E_true[..., 0])) / np.max(
             np.abs(E_true[..., 0])
@@ -229,8 +300,8 @@ class TestFourierVerification:
 
         c2_dx2 = c * c / (delta * delta)
         c2_dx4 = c * c / (4.0 * delta * delta)
-        A_1 = ohm.assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4)
-        A_2 = ohm.assemble_matrix_2(Nx, Ny, L, c2_dx2)
+        A_1 = ohm.assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, bc_x="periodic")
+        A_2 = ohm.assemble_matrix_2(Nx, Ny, L, c2_dx2, bc_x="periodic")
 
         E_flat = np.concatenate(
             [E_true[..., 0].flatten(order="C"), E_true[..., 1].flatten(order="C")]
@@ -243,7 +314,7 @@ class TestFourierVerification:
         S[..., 1] = S_1[Nx * Ny :].reshape((Ny, Nx), order="C")
         S[..., 2] = S_2.reshape((Ny, Nx), order="C")
 
-        E_solved = ohm.solve_ohm_2d(L, S, c, delta)
+        E_solved = ohm.solve_ohm_2d(L, S, c, delta, bc_x="periodic")
 
         rel_err_Ex = np.max(np.abs(E_solved[..., 0] - E_true[..., 0])) / np.max(
             np.abs(E_true[..., 0])
@@ -280,8 +351,8 @@ class TestFourierVerification:
 
         c2_dx2 = c * c / (delta * delta)
         c2_dx4 = c * c / (4.0 * delta * delta)
-        A_1 = ohm.assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4)
-        A_2 = ohm.assemble_matrix_2(Nx, Ny, L, c2_dx2)
+        A_1 = ohm.assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, bc_x="periodic")
+        A_2 = ohm.assemble_matrix_2(Nx, Ny, L, c2_dx2, bc_x="periodic")
 
         E_flat = np.concatenate(
             [E_true[..., 0].flatten(order="C"), E_true[..., 1].flatten(order="C")]
@@ -294,7 +365,7 @@ class TestFourierVerification:
         S[..., 1] = S_1[Nx * Ny :].reshape((Ny, Nx), order="C")
         S[..., 2] = S_2.reshape((Ny, Nx), order="C")
 
-        E_solved = ohm.solve_ohm_2d(L, S, c, delta)
+        E_solved = ohm.solve_ohm_2d(L, S, c, delta, bc_x="periodic")
 
         rel_err_Ex = np.max(np.abs(E_solved[..., 0] - E_true[..., 0]))
         rel_err_Ey = np.max(np.abs(E_solved[..., 1] - E_true[..., 1])) / np.max(

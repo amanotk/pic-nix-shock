@@ -110,10 +110,37 @@ Similarly, the source term on the right-hand side of the generalized Ohm's law m
 ```
 
 ### Boundary Condition
-We use the periodic boundary condition in the $y$-direction, whereas $\partial/\partial x = 0$ is assumed at the boundaries in the $x$-direction.
+In this solver, fields are defined at cell centers. In the $x$-direction, boundaries are
+located at half-grid positions, and homogeneous Neumann boundary conditions are
+imposed with ghost-cell copying:
+```math
+E^\alpha_{-1,j} = E^\alpha_{0,j}, \qquad
+E^\alpha_{N_x,j} = E^\alpha_{N_x-1,j}, \qquad
+\alpha \in \{x,y,z\}.
+```
+This corresponds to $\partial E^\alpha / \partial x = 0$ at both $x$ boundaries.
+
+In the $y$-direction, periodic boundary conditions are used:
+```math
+E^\alpha_{i,-1} = E^\alpha_{i,N_y-1}, \qquad
+E^\alpha_{i,N_y} = E^\alpha_{i,0}.
+```
+
+For the coupled $(E^x, E^y)$ system, mixed-derivative coupling blocks at the
+$x$-boundary rows are assembled with transpose pairing,
+$A_{yx} = A_{xy}^{\mathsf T}$, to preserve global matrix symmetry.
+Therefore, one mixed block is interpreted as the explicitly imposed boundary
+closure and the other is its adjoint-consistent counterpart. This keeps the
+discrete operator self-adjoint and compatible with CG-based solvers.
 
 ### Verification
-Assuming that a physical quantity $A(x,y)$ vary in the form: $A(x,y) = \tilde{A} \exp \left[ i (k_x x + k_y y) \right]$ and substituting it into the finite difference approximation of the generalized Ohm's law, we can obtain the following algebraic equation:
+Two verification paths are used in this repository.
+
+#### Periodic-$x$ mode (test-only)
+
+When both $x$ and $y$ are periodic (`bc_x="periodic"`), assuming
+$A(x,y) = \tilde{A} \exp \left[ i (k_x x + k_y y) \right]$, the finite-difference
+operator yields the algebraic system:
 ```math
 \begin{aligned}
 \begin{pmatrix}
@@ -136,7 +163,35 @@ Assuming that a physical quantity $A(x,y)$ vary in the form: $A(x,y) = \tilde{A}
 \begin{pmatrix} \tilde{S}^x \\ \tilde{S}^y \\ \tilde{S}^z \end{pmatrix},
 \end{aligned}
 ```
-where we have assumed that $\Lambda$ is constant for simplicity. Inverting the above matrix, we can obtain the electric field $\tilde{E}^x, \tilde{E}^y, \tilde{E}^z$ for the given source term $\tilde{S}^x, \tilde{S}^y, \tilde{S}^z$. This can be used to verify the numerical implementation of the generalized Ohm's law.
+with constant $\Lambda$ for simplicity.
+
+#### Neumann-$x$ mode (default runtime)
+
+With cell-centered unknowns and Neumann closure at half-grid boundaries in $x$,
+the natural $x$ eigenmodes are cosine (DCT-like) modes:
+```math
+\phi_m(i) = \cos\!\left(\frac{\pi m (i+1/2)}{N_x}\right),
+\qquad m = 0,\ldots,N_x-1.
+```
+Using periodic Fourier modes in $y$ with index $n$, an $E^z$ manufactured solution
+```math
+E^z_{i,j} = E_0\,\phi_m(i)\cos\!\left(\frac{2\pi n j}{N_y}\right)
+```
+is an eigenfunction of the discrete $E^z$ operator with eigenvalue
+```math
+\lambda_{m,n} = \Lambda + \frac{4c^2}{\Delta^2}
+\left[
+\sin^2\!\left(\frac{\pi m}{2N_x}\right) +
+\sin^2\!\left(\frac{\pi n}{N_y}\right)
+\right].
+```
+Hence $S^z_{i,j} = \lambda_{m,n} E^z_{i,j}$ provides a direct verification case for
+the Neumann-$x$/periodic-$y$ discretization.
+
+For the coupled $(E^x,E^y)$ block with symmetry-preserving mixed-boundary assembly,
+verification is performed numerically (matrix symmetry checks and
+manufactured-solution solves) rather than with a single closed-form periodic
+Fourier matrix.
 
 ## Reference
 

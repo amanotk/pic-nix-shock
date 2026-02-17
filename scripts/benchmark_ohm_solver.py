@@ -28,7 +28,7 @@ def _build_case(nx, ny, seed):
     return L, S
 
 
-def _run_solver(nx, ny, c, delta, solver, repeats, seed):
+def _run_solver(nx, ny, c, delta, solver, repeats, seed, bc_x):
     elapsed_total = []
     elapsed_a1 = []
     elapsed_a2 = []
@@ -52,9 +52,9 @@ def _run_solver(nx, ny, c, delta, solver, repeats, seed):
 
     for i in range(repeats):
         L, S = _build_case(nx, ny, seed + i)
-        base1, base2 = ohm.build_ohm_bases(nx, ny, c2_dx2, c2_dx4)
-        A_1 = ohm.assemble_matrix_1(nx, ny, L, c2_dx2, c2_dx4, base=base1)
-        A_2 = ohm.assemble_matrix_2(nx, ny, L, c2_dx2, base=base2)
+        base1, base2 = ohm.build_ohm_bases(nx, ny, c2_dx2, c2_dx4, bc_x=bc_x)
+        A_1 = ohm.assemble_matrix_1(nx, ny, L, c2_dx2, c2_dx4, base=base1, bc_x=bc_x)
+        A_2 = ohm.assemble_matrix_2(nx, ny, L, c2_dx2, base=base2, bc_x=bc_x)
 
         b1 = np.concatenate([S[..., 0].flatten(order="C"), S[..., 1].flatten(order="C")])
         b2 = S[..., 2].flatten(order="C")
@@ -104,6 +104,13 @@ def main():
     parser.add_argument("--seed", type=int, default=123, help="Random seed")
     parser.add_argument("--c", type=float, default=1.0, help="Speed of light")
     parser.add_argument("--delta", type=float, default=1.0, help="Grid spacing")
+    parser.add_argument(
+        "--bc-x",
+        type=str,
+        default="neumann",
+        choices=["neumann", "periodic"],
+        help="Boundary condition in x",
+    )
     args = parser.parse_args()
 
     print(f"Benchmarking Ohm solver on grid {args.nx}x{args.ny}, repeats={args.repeats}")
@@ -116,6 +123,7 @@ def main():
         solver="cg",
         repeats=args.repeats,
         seed=args.seed,
+        bc_x=args.bc_x,
     )
     res_mgcg = _run_solver(
         nx=args.nx,
@@ -125,6 +133,7 @@ def main():
         solver="mgcg",
         repeats=args.repeats,
         seed=args.seed,
+        bc_x=args.bc_x,
     )
 
     results = (res_cg, res_mgcg)

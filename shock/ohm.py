@@ -69,7 +69,57 @@ def _periodic_first_difference_matrix(n):
     return D.tocsr()
 
 
-def build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4):
+def _neumann_second_difference_matrix(n):
+    """Return x-Neumann 1D second-difference matrix (n x n)."""
+    if n <= 1:
+        return sparse.csr_matrix((n, n))
+    D = sparse.lil_matrix((n, n))
+    D.setdiag(-2.0)
+    D.setdiag(1.0, k=-1)
+    D.setdiag(1.0, k=1)
+    D[0, 0] = -1.0
+    D[n - 1, n - 1] = -1.0
+    return D.tocsr()
+
+
+def _neumann_first_difference_matrix(n):
+    """Return x-Neumann 1D first-difference matrix (n x n), no 1/(2Δ) factor."""
+    if n <= 1:
+        return sparse.csr_matrix((n, n))
+    D = sparse.lil_matrix((n, n))
+    D[0, 0] = -1.0
+    D[0, 1] = 1.0
+    for i in range(1, n - 1):
+        D[i, i - 1] = -1.0
+        D[i, i + 1] = 1.0
+    D[n - 1, n - 2] = -1.0
+    D[n - 1, n - 1] = 1.0
+    return D.tocsr()
+
+
+def _normalize_bc_x(bc_x):
+    """Validate and normalize x-boundary option."""
+    valid = {"periodic", "neumann"}
+    if bc_x not in valid:
+        raise ValueError(f"bc_x must be one of {sorted(valid)}, got {bc_x!r}")
+    return bc_x
+
+
+def _x_operators(bc_x, n):
+    """Return first- and second-difference x operators for requested BC."""
+    bc_x = _normalize_bc_x(bc_x)
+    second_builders = {
+        "periodic": _periodic_second_difference_matrix,
+        "neumann": _neumann_second_difference_matrix,
+    }
+    first_builders = {
+        "periodic": _periodic_first_difference_matrix,
+        "neumann": _neumann_first_difference_matrix,
+    }
+    return first_builders[bc_x](n), second_builders[bc_x](n)
+
+
+def build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4, bc_x="neumann"):
     """
     Build Lambda-independent base matrices for Ohm solver.
 
@@ -83,9 +133,8 @@ def build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4):
     Ix = sparse.eye(Nx, format="csr")
     Iy = sparse.eye(Ny, format="csr")
 
-    Dxx = _periodic_second_difference_matrix(Nx)
+    Dx1, Dxx = _x_operators(bc_x, Nx)
     Dyy = _periodic_second_difference_matrix(Ny)
-    Dx1 = _periodic_first_difference_matrix(Nx)
     Dy1 = _periodic_first_difference_matrix(Ny)
 
     Lx = sparse.kron(Iy, Dxx, format="csr")
@@ -95,22 +144,23 @@ def build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4):
     Axx_base = (-c2_dx2) * Ly
     Ayy_base = (-c2_dx2) * Lx
     Axy_base = c2_dx4 * Cxy
+    Ayx_base = c2_dx4 * Cxy.T
 
-    base1 = sparse.bmat([[Axx_base, Axy_base], [Axy_base, Ayy_base]], format="csr")
+    base1 = sparse.bmat([[Axx_base, Axy_base], [Ayx_base, Ayy_base]], format="csr")
     base2 = (-c2_dx2) * (Lx + Ly)
 
     return base1, base2
 
 
-def build_ohm_bases_from_grid(Nx, Ny, c, delta):
+def build_ohm_bases_from_grid(Nx, Ny, c, delta, bc_x="neumann"):
     """Build Lambda-independent base matrices from physical grid parameters."""
     c2 = c * c
     c2_dx2 = c2 / (delta * delta)
     c2_dx4 = c2 / (4.0 * delta * delta)
-    return build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+    return build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4, bc_x=bc_x)
 
 
-def assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=None):
+def assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=None, bc_x="neumann"):
     """
     Assemble sparse matrix for system 1 (Ex, Ey coupled).
 
@@ -120,7 +170,7 @@ def assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=None):
     - Axy, Ayx: mixed derivative terms (diagonal neighbors)
 
     The discretization follows wavetool.md equations (2a)-(2b).
-    Uses periodic boundary conditions in both x and y directions.
+    Uses periodic boundary conditions in y and selectable boundary conditions in x.
 
     Parameters
     ----------
@@ -143,7 +193,7 @@ def assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=None):
         Sparse matrix of shape (2*N, 2*N)
     """
     if base is None:
-        base, _ = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+        base, _ = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4, bc_x=bc_x)
     else:
         expected_shape = (2 * Nx * Ny, 2 * Nx * Ny)
         if base.shape != expected_shape:
@@ -155,7 +205,7 @@ def assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=None):
     return base + L_block
 
 
-def assemble_matrix_2(Nx, Ny, L, c2_dx2, base=None):
+def assemble_matrix_2(Nx, Ny, L, c2_dx2, base=None, bc_x="neumann"):
     """
     Assemble sparse matrix for system 2 (Ez decoupled).
 
@@ -163,7 +213,7 @@ def assemble_matrix_2(Nx, Ny, L, c2_dx2, base=None):
     (∇×∇×E)_z ≈ -(c²/Δ²)(Ez_{i+1,j} - 2Ez_{i,j} + Ez_{i-1,j})
                  -(c²/Δ²)(Ez_{i,j+1} - 2Ez_{i,j} + Ez_{i,j-1})
 
-    Uses periodic boundary conditions in both x and y directions.
+    Uses periodic boundary conditions in y and selectable boundary conditions in x.
 
     Parameters
     ----------
@@ -185,7 +235,7 @@ def assemble_matrix_2(Nx, Ny, L, c2_dx2, base=None):
     """
     if base is None:
         c2_dx4 = 0.25 * c2_dx2
-        _, base = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+        _, base = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4, bc_x=bc_x)
     else:
         expected_shape = (Nx * Ny, Nx * Ny)
         if base.shape != expected_shape:
@@ -224,12 +274,13 @@ def solve_ohm_2d(
     M1=None,
     M2=None,
     return_info=False,
+    bc_x="neumann",
 ):
     """
     Solve the 2D generalized Ohm's law.
 
     Solves: (Λ + c²∇×∇×)E = S
-    Uses periodic boundary conditions in both x and y directions.
+    Uses periodic boundary conditions in y and selectable boundary conditions in x.
 
     Parameters
     ----------
@@ -253,6 +304,8 @@ def solve_ohm_2d(
         Optional preconditioner for system A1.
     M2 : scipy.sparse.linalg.LinearOperator, optional
         Optional preconditioner for system A2.
+    bc_x : {"neumann", "periodic"}, optional
+        Boundary condition in x direction.
     return_info : bool, optional
         If True, return a tuple (E, info_dict).
 
@@ -278,9 +331,10 @@ def solve_ohm_2d(
     c2 = c * c
     c2_dx2 = c2 / (delta * delta)
     c2_dx4 = c2 / (4.0 * delta * delta)
+    bc_x = _normalize_bc_x(bc_x)
 
     if base1 is None or base2 is None:
-        built_base1, built_base2 = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+        built_base1, built_base2 = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4, bc_x=bc_x)
         if base1 is None:
             base1 = built_base1
         if base2 is None:
@@ -297,8 +351,8 @@ def solve_ohm_2d(
             f"base2 shape {base2.shape} must be {expected_shape_2} for Nx={Nx}, Ny={Ny}"
         )
 
-    A_1 = assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=base1)
-    A_2 = assemble_matrix_2(Nx, Ny, L, c2_dx2, base=base2)
+    A_1 = assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=base1, bc_x=bc_x)
+    A_2 = assemble_matrix_2(Nx, Ny, L, c2_dx2, base=base2, bc_x=bc_x)
 
     S_1 = np.concatenate([S[..., 0].flatten(order="C"), S[..., 1].flatten(order="C")])
     S_2 = S[..., 2].flatten(order="C")
