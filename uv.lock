@@ -5135,6 +5135,106 @@ wheels = [
 ]
 
 [[package]]
+name = "pyamg"
+version = "5.1.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.9'",
+]
+dependencies = [
+    { name = "numpy", version = "1.24.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "scipy", version = "1.10.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/37/bdc7f3d8622ff1a6e96ed62fe7d3a068bab62aafcf7cd434b065f62634ff/pyamg-5.1.0.tar.gz", hash = "sha256:f90f9de795b4e29589edd2eb446d11ddb466678ebe823ed329fcf35759ea390c", size = 4145737, upload-time = "2024-03-19T15:55:06.4Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/da/538e3c530f11516e1ff44adc9349c14639c9612f1aec57e81eab29c0abc7/pyamg-5.1.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:3be3d4e6d74cc30e344ee0aa2f995ef3712e24ed161d5ca9e84e67bc2415a97f", size = 2506607, upload-time = "2024-03-19T15:53:54.237Z" },
+    { url = "https://files.pythonhosted.org/packages/33/21/86840ab8343e67401131c5b0228a884592c5c5bc9c123f03a7670d62f59b/pyamg-5.1.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:9ae5b83f68224daf9b9c59cb7c1b34a535ff0a01d7abb129a99ae4455478de2e", size = 1674234, upload-time = "2024-03-19T15:53:56.861Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/0c/d5fe73cac24dfba5b4756ef87a7de8fde4ab05e9e802d377fbd614cbf293/pyamg-5.1.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:9df3e4a4de0f90796dea272ab6aa9a1f52d4912e175e121a669cf7a9974dd7a6", size = 1598607, upload-time = "2024-03-19T15:53:58.665Z" },
+    { url = "https://files.pythonhosted.org/packages/12/8c/72cd639664a55d81741c7f9ed8ec1b4bcbeafa5838f3f5ce3e4f8dc45fd1/pyamg-5.1.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:63116832e812e840c562ad66f144b2547fb209399a60520ca37f764e174d4a3d", size = 1920776, upload-time = "2024-03-19T15:54:00.583Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/06/0ecd1a13301242c4533dee12ec0825158a43068e5f14df3069165e45f925/pyamg-5.1.0-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:8e9fb2579a6a2477f887a61f7c61a759caeb3b3fb864b255c8c009c0ab2bf17b", size = 2218930, upload-time = "2024-03-19T15:54:02.523Z" },
+    { url = "https://files.pythonhosted.org/packages/10/16/489b50b9b84bdf9695f2cd51c085184abca2891a08c6bf11d16a36e2dcff/pyamg-5.1.0-cp310-cp310-win32.whl", hash = "sha256:027d90eb1e4254caa7f19c604d26f569547f4e013587411d94d3c1cc11c8d1b0", size = 1415972, upload-time = "2024-03-19T15:54:04.405Z" },
+    { url = "https://files.pythonhosted.org/packages/37/71/604857aef7039934534bf5771463038340ae20afcc4bb599960f9592d9ab/pyamg-5.1.0-cp310-cp310-win_amd64.whl", hash = "sha256:d2005dbfba9230c000731c8b5e874d36307768178ccdc7f1f87a8b1302357451", size = 1559790, upload-time = "2024-03-19T15:54:06.712Z" },
+    { url = "https://files.pythonhosted.org/packages/76/e6/827f867893d2dbc35c7c0ab32de6e34b4d69e4838d1c6b23ba07f2d2c029/pyamg-5.1.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:18262da25d46daeae6d05b900c93fc7dc13abfc518a877e0e895258969a0e062", size = 2531509, upload-time = "2024-03-19T15:54:09.167Z" },
+    { url = "https://files.pythonhosted.org/packages/89/d5/30dad1033c05535fe77c2119845091e007623cbd544081182c3a492b2784/pyamg-5.1.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:fbfd14c5e1bec11e2e7c7ddedbb5194f32a00dacc3078b02626d432eae1389d6", size = 1687212, upload-time = "2024-03-19T15:54:11.499Z" },
+    { url = "https://files.pythonhosted.org/packages/59/7c/cb1a415427fe24cef931f323ec0c8a5d10fc54f8e7bd3e0bb64bcfcc928c/pyamg-5.1.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:58d1cf0f512e047311605e14532a16203cdb7ab4af845db4275d04a8b90e8bc9", size = 1609469, upload-time = "2024-03-19T15:54:13.251Z" },
+    { url = "https://files.pythonhosted.org/packages/e3/b0/2c74a638c533781b45018c503f7c87f3376b5c1d8e9c99716904e07dc569/pyamg-5.1.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d1b9e9fdb61b861387f73b6716427792c29ba3fa7b0ca7641c6db8aac80f5eb6", size = 1931872, upload-time = "2024-03-19T15:54:15.01Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/fb/25863408d2d1cf4460a273eaaea7fe57769fdbf2232df43095dff319bbbd/pyamg-5.1.0-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:4e5b75c0815f2949e17b6fc9f2ee93486a28f623575b5f55d4eb7c620e0cfb9b", size = 2229543, upload-time = "2024-03-19T15:54:17.429Z" },
+    { url = "https://files.pythonhosted.org/packages/db/39/8c36ff3176e5c1d2084943264e67f77ea89e8b1b5b303ae05c623d20323d/pyamg-5.1.0-cp311-cp311-win32.whl", hash = "sha256:a1acacd509be8c4a343338377b9b63b1edf9afb30876dbc52847f2b6b45d8e1f", size = 1425712, upload-time = "2024-03-19T15:54:19.001Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/77/00666e55a314303c6b05ddb4e86dc5978be15b199f7274cb6f304cf4285d/pyamg-5.1.0-cp311-cp311-win_amd64.whl", hash = "sha256:d05fe91e150dfd104c6e5c239a0c29cf9274df935642dfe682a38608f48967f3", size = 1568740, upload-time = "2024-03-19T15:54:21.624Z" },
+    { url = "https://files.pythonhosted.org/packages/68/c9/6a2e6456d5af9b7635947b917bfa357a204a6beb2b2ab0d9992ddda17a30/pyamg-5.1.0-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:be0380b60e6713dc5a003ffe9258b12fc67c392433904083725105520b6b882e", size = 2496052, upload-time = "2024-03-19T15:54:23.759Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/6a/5420416ecfecec2c28bdf719d49ad747a19c45b81d91a75e6dd57fe8e85b/pyamg-5.1.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:fe641ab04b922f1db9f7c4b07493604642235d1ce70ef5c057c2a94b4a46f150", size = 1672204, upload-time = "2024-03-19T15:54:26.091Z" },
+    { url = "https://files.pythonhosted.org/packages/50/b6/5dd8474bdcc9ab4be0540f45bfdf827780170c006b5e49f0a1dd2fe8d448/pyamg-5.1.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:78161bde9398165ef8b492ef99fad624727317823a7975cc60952817a0cdff77", size = 1590445, upload-time = "2024-03-19T15:54:28.325Z" },
+    { url = "https://files.pythonhosted.org/packages/58/87/d94acafccebab2ed8d173f9987abce21b44620c3c95b7c40c47b8d904885/pyamg-5.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e19e085a88bd33efdc8f2f9c6432b3d0bd4d42c058e7fad6ac5a31bd5a322fd6", size = 1926394, upload-time = "2024-03-19T15:54:30.78Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/85/e33262043c3fba4fb0df1a57388b30562e4d52521e6f3912623d0f206a89/pyamg-5.1.0-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:a3c4df638ac5c2bde1d13e96514c043f975eb6f7431adfca27f991569018f5e3", size = 2227167, upload-time = "2024-03-19T15:54:32.527Z" },
+    { url = "https://files.pythonhosted.org/packages/02/e6/e6d5c22c783e5e33f7b1ec02ee0fcf61d1359f1554000a8e436f1520faa1/pyamg-5.1.0-cp312-cp312-win32.whl", hash = "sha256:b1f4e754ddfc22d391b7ef5b6909485fe1327159d131fb6b51c4a1bdf25cfe85", size = 1418053, upload-time = "2024-03-19T15:54:34.926Z" },
+    { url = "https://files.pythonhosted.org/packages/33/07/2a9c3deb7e59ea24bb5c5e9f6604c824e486274acb5a80fe0fcc4811b95a/pyamg-5.1.0-cp312-cp312-win_amd64.whl", hash = "sha256:73860f5c831338c0440813770dbf42bb957c7d332235d2d9435359d0ab41fdcc", size = 1561795, upload-time = "2024-03-19T15:54:36.611Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/8d/a08cc530d7af00fb12dff1b7ec3f93be5ecf49ee256a1c50189c8023df65/pyamg-5.1.0-cp38-cp38-macosx_10_9_universal2.whl", hash = "sha256:0b8bdff27984852294904c4c7def8e755529445ef744da9274de4c3f00f85ea2", size = 2504724, upload-time = "2024-03-19T15:54:38.695Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/83/2b6912077f7dc62183422cee5fa791231bf698a34bb36b50bf5bb2ae11fb/pyamg-5.1.0-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:6e7e51aaeeb5fcc97bf1dd0a6ba148e9fc26feb1989e78ebeca940b63e6761c8", size = 1673510, upload-time = "2024-03-19T15:54:40.325Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/04/79671aaea4394e352fdca8ffebe29847660798ea02b4a5f83d62fcf0dcba/pyamg-5.1.0-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:6c1e2dd4821e43773247e23d16c935c33223fbb7bfb3023b97a0151ddff38c90", size = 1597519, upload-time = "2024-03-19T15:54:42.689Z" },
+    { url = "https://files.pythonhosted.org/packages/25/b2/6357df92d9f1404ebb7aa8404f5f7df7a4cba7d5c905d523a935f38f9fb3/pyamg-5.1.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5473f3a7267543c3e88f0f9bf38d7a8e5a2d13702a088963c622941737ee84db", size = 1918412, upload-time = "2024-03-19T15:54:44.338Z" },
+    { url = "https://files.pythonhosted.org/packages/56/9e/27676cb98fd296e8d6ec755aa947546d7fa664cdc2644edbf33512fc76ad/pyamg-5.1.0-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:bfdb7ccf4fff812d9335453b8794282c7bcb7ad01de7bfd0881377243c757859", size = 2216904, upload-time = "2024-03-19T15:54:45.846Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/72/09cf9b6398ca827c783db923d9f86071d19bf960fc80281a270836cb88b5/pyamg-5.1.0-cp38-cp38-win32.whl", hash = "sha256:a04259e8707befb333b9a0be0d2fe68966a284b2a95581c84a2472452767bf77", size = 1416789, upload-time = "2024-03-19T15:54:47.421Z" },
+    { url = "https://files.pythonhosted.org/packages/16/a9/4a845b46c722ffd864a6623666bb5b62dabbc760a6b3674e8939550a1617/pyamg-5.1.0-cp38-cp38-win_amd64.whl", hash = "sha256:59dc814213ba6ca26b556fe010718cbbe4b08bb8964e140dc3e6327cbcc8dd88", size = 1560713, upload-time = "2024-03-19T15:54:49.834Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/72/55875d5ce7e3dc5efed77b68ac2ebed9bccd5b54f37d3db8b177e5708e9e/pyamg-5.1.0-cp39-cp39-macosx_10_9_universal2.whl", hash = "sha256:638e6717dc14b8ff088c8aaec9261872fba7ca986c1403cfe5880d0687f06743", size = 2509279, upload-time = "2024-03-19T15:54:52.175Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/d1/3e4a88961ec1f7199da22c6e520e6cc25595bcace27e1609228039903ace/pyamg-5.1.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:46e69b705b03ef55cf5fb63bc9afbdf8e9ee5c983826b78a60b25e833bf76242", size = 1675598, upload-time = "2024-03-19T15:54:53.883Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/ab/3399be00da30d9838ca1bd38988f4825d873b69e39d2dc87f155a75ff9a3/pyamg-5.1.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:ff2fe7ef6b3092c0f495ab8ff25355c5f8ef82cb05e5970f541955188522e146", size = 1599843, upload-time = "2024-03-19T15:54:55.887Z" },
+    { url = "https://files.pythonhosted.org/packages/68/a9/aed9f557e7eb779d2cb4fa090663f8540979e0c04dadd16e9a0bdc9632c5/pyamg-5.1.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5817d4567fb240dab4779bb1630bbb3035b3827731fcdaeb9ecc9c8814319995", size = 1922408, upload-time = "2024-03-19T15:54:57.567Z" },
+    { url = "https://files.pythonhosted.org/packages/25/34/7a50668e90fc280658a1ea0c3809b612268fe3102db4c4fa7c197d51c575/pyamg-5.1.0-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:991dc5031c14c6fda68334fac660fe5000ea039e991db211061771093ea9ece7", size = 2220462, upload-time = "2024-03-19T15:54:59.403Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/a0/2efaad5cbd23ca60f908931eb809ad33629e4dc062be7f2a0f8e862a4047/pyamg-5.1.0-cp39-cp39-win32.whl", hash = "sha256:c5c43ea803595c31feda8ec00552432b1ca7c5754d99437c409db66a5f06fad9", size = 1417619, upload-time = "2024-03-19T15:55:02.729Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/bd/57094ba47bca2ce45dbb988450ac63dc7c89db7b61047fd4ed4aac2add86/pyamg-5.1.0-cp39-cp39-win_amd64.whl", hash = "sha256:f89cbbeca79320c34b8f98aa80041112fa769dcef9c6ccc421b412cc276c33d8", size = 1547602, upload-time = "2024-03-19T15:55:04.682Z" },
+]
+
+[[package]]
+name = "pyamg"
+version = "5.3.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.14' and sys_platform == 'win32'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.10.*'",
+    "python_full_version == '3.9.*'",
+]
+dependencies = [
+    { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
+    { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "scipy", version = "1.13.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
+    { name = "scipy", version = "1.17.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/54/f1/e7f0466af00dc59b6592f03499a8ca1c839d5265a045d0b010b574f67143/pyamg-5.3.0.tar.gz", hash = "sha256:5323d0f1a4cd999be246a90d580c9e1e9b584b98887f6298d397611087ef860b", size = 4161140, upload-time = "2025-08-24T02:06:10.133Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/d1/21cbb2322b289ad903523c62bd89ecf6f31d6cdc682945fc0c3ebf7499d4/pyamg-5.3.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:8c5101865fb9135dd87c5039f8e5427e3d526df48cbb03338d4c8823c70eff33", size = 1825211, upload-time = "2025-08-24T02:05:26.522Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/02/3da10e9ca92f68f5ec839fb4cc53429aca63ad901a1c13e871b51c644fdc/pyamg-5.3.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:6d5a724a9257d4d5da2155501cff00d643673d17e3da4b5b2cb4e26df1d23b13", size = 1740669, upload-time = "2025-08-24T02:05:28.878Z" },
+    { url = "https://files.pythonhosted.org/packages/21/9b/68d64577035dc30f1c420f73e8e418afd9299f50b1d3bec153d6abaf1af2/pyamg-5.3.0-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:564b2b0356f0e948a2fc531834766a75005e3de325619735d612b767dad73339", size = 1871905, upload-time = "2025-08-24T02:05:30.839Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/7b/f90952de16963ddcfafdc0c8aeb238a6e4bf59f10f6ae59d9617d8944680/pyamg-5.3.0-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:e642cec5ff3b386e6087ccdda1b28b3d683f00437245b23c13f39b22ff08b058", size = 2913195, upload-time = "2025-08-24T02:05:33.047Z" },
+    { url = "https://files.pythonhosted.org/packages/79/a4/0c29d5a4503e874c6cbf923ff60dcd77c900945b62f87be1708f237423ce/pyamg-5.3.0-cp310-cp310-win32.whl", hash = "sha256:dcd4f1bbf0f4566d62c0dbcbfb428fbb256c44d8b70e1abe903505d1af19c3f6", size = 1545120, upload-time = "2025-08-24T02:05:35.128Z" },
+    { url = "https://files.pythonhosted.org/packages/57/a5/93bff939b883fb15fa6e8b67bbf01aadaa60ff5c77737c5404f960210a7d/pyamg-5.3.0-cp310-cp310-win_amd64.whl", hash = "sha256:dc2ee51c0a9c1a9d265d360b8dad4ef981fa8742bdc641a4e8698c438e6c7e33", size = 1666849, upload-time = "2025-08-24T02:05:36.615Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/02/2f5bb76d617a6932c832b71947d57a304a418f95476ff4ea72708b1bac17/pyamg-5.3.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:82619094609688d715871bce25eadfe425156242ea2ce1d73388b8af85e75f9d", size = 1838059, upload-time = "2025-08-24T02:05:38.717Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/c8/3dfa1198a989f72d628675f81025d80863fc9759bfcc2c2eb1c0bde465ce/pyamg-5.3.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:cd91201d246824bdf2ff16129db48b764cf10e5b45f1fd0b4af537591be1091c", size = 1752381, upload-time = "2025-08-24T02:05:40.378Z" },
+    { url = "https://files.pythonhosted.org/packages/af/6a/dea72ea86c94aadab83a1ff8bd4198897a350325911749fb26a2a61271bd/pyamg-5.3.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8701ed806ed2195ff9cdad6f2b80d2b0a4d5b652d0232c0ebc43c677db88662f", size = 1880268, upload-time = "2025-08-24T02:05:42.018Z" },
+    { url = "https://files.pythonhosted.org/packages/48/83/88bbcfab2c40d1cb04baab71f8c8d08c00aeab3202a4ea0e81b365c07311/pyamg-5.3.0-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:14d921d6f09eb9b4b3e6c22e1ef19ec27ddd193cf406dbec43ccadc4baf2a2f9", size = 2921913, upload-time = "2025-08-24T02:05:43.72Z" },
+    { url = "https://files.pythonhosted.org/packages/01/16/814d99c2d2bb52617b0848a62b5b4dad0cc381096ee65f5a382fe356d414/pyamg-5.3.0-cp311-cp311-win32.whl", hash = "sha256:d43fac3c4b5f2195716d1630bf7e7123bd1cc40f61d78cb8f257876a9816eb6a", size = 1555492, upload-time = "2025-08-24T02:05:45.307Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/7f/3e724b274f4dce9934f05f5df76ef17b4312dbffda11cb24b37ba47ada39/pyamg-5.3.0-cp311-cp311-win_amd64.whl", hash = "sha256:6aff801a44a5eac40ffc171e326467daa571ddc93511db7c35a17150b8bed77a", size = 1673450, upload-time = "2025-08-24T02:05:46.948Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/6f/603ade45abb6ef8fdc40884cb246733efe110db2563c54fd19f7dc240832/pyamg-5.3.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:661f510311fbfa03b8b317ce9cdb6602902321dd936bcc975ee94bfe43eacb72", size = 1852410, upload-time = "2025-08-24T02:05:48.601Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/c4/ae346f844d4e08a15b9178707ced39de3f92c4e1b0447d0a9c5ccd24eaac/pyamg-5.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:d7d38303310e8551ae737898577c6ec69a1ee0fa4baf95f525c86f0071d94260", size = 1763595, upload-time = "2025-08-24T02:05:50.55Z" },
+    { url = "https://files.pythonhosted.org/packages/db/45/1c03a50699d1ce96f5a3f54755c3bdd575e459f8ba2c66eba3365881584c/pyamg-5.3.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:2a69c7974b26b1d5cd5bc0e371c565239199e9032b2ceb97190d492cd6498367", size = 1899545, upload-time = "2025-08-24T02:05:52.522Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/16/d703720aeaf57eca57867993b57d969ed1bc9675a93c82606663587aa285/pyamg-5.3.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:4a6de101435d11645293f83b23c22830c372100d13e6d0bcb8d1abd3e92c88c8", size = 2943354, upload-time = "2025-08-24T02:05:54.065Z" },
+    { url = "https://files.pythonhosted.org/packages/79/84/cefaabc44798ba7df2e806f4eb06ea435fe627886b40f312d263aaa7b76f/pyamg-5.3.0-cp312-cp312-win32.whl", hash = "sha256:0561b942b7b8a35700842077a2b6a228510ae8fcc402862bd3f60dc7d2cd75f4", size = 1563969, upload-time = "2025-08-24T02:05:55.662Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/8b/ff8c56c1f7a7997c7988c84bc55bc34b336b862531fbf88d3a8c5aa3fe5f/pyamg-5.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:dd832b392314c5d4dbb6464f7ba8d788694d253a51b9809af8ade4886d24565f", size = 1681747, upload-time = "2025-08-24T02:05:57.421Z" },
+    { url = "https://files.pythonhosted.org/packages/66/b9/705e5f5177d545114d8ae46245de6bb5b8e3e92d9886a31b7fa475762efd/pyamg-5.3.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:c8e70912b1f6fd02c2d40ca10f6e94cce24181a1baa029f084aee74600242686", size = 1852677, upload-time = "2025-08-24T02:05:59.084Z" },
+    { url = "https://files.pythonhosted.org/packages/48/39/9da477018dd8eee06f064eee3d9047089c0621b3bda63ee99f256b27b287/pyamg-5.3.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:e8f771f1ad314534d14d6d8a47d289b191f081abdd1443c491ac93f6d3102be5", size = 1763803, upload-time = "2025-08-24T02:06:01.006Z" },
+    { url = "https://files.pythonhosted.org/packages/63/f3/c13ae1422434baeefe4d4f306a1cc77f024fe96d2abab3c212cfa1bf3ff8/pyamg-5.3.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5cc223c66a7aca06fba898eb5e8ede6bb7974a9ddf7b8a98f56143c829e63631", size = 1900343, upload-time = "2025-08-24T02:06:03.103Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/86/13b27316cf5f984720b736b58d7a0d8bf94870b99a546a0137f53f36924c/pyamg-5.3.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:fddf30940d422d97a24b6211e3405bf707688a94d0683780ae40073209c3aa6d", size = 2946401, upload-time = "2025-08-24T02:06:05.101Z" },
+    { url = "https://files.pythonhosted.org/packages/96/e2/ac14da5a3df18652f651788bf8eda9dcf99a485787ccb28add2fcd5d8eda/pyamg-5.3.0-cp313-cp313-win32.whl", hash = "sha256:6f7ea204aafc7e57a1900d47067430b059954d293a11025aea8616e5b6fba493", size = 1564120, upload-time = "2025-08-24T02:06:06.688Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/b4/72f17561584b51d9c9ca121b5307699eb6aa8300c812a31c8b4ea4ad9d2a/pyamg-5.3.0-cp313-cp313-win_amd64.whl", hash = "sha256:3965844194dc15be5c9d7198086b58496c2833e40e60b1133ab340d24fac950c", size = 1681868, upload-time = "2025-08-24T02:06:08.388Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "2.23"
 source = { registry = "https://pypi.org/simple" }
@@ -6653,6 +6753,8 @@ dependencies = [
     { name = "pandas", version = "2.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9' and python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pyamg", version = "5.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+    { name = "pyamg", version = "5.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
     { name = "pytest", version = "8.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
     { name = "pytest", version = "9.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
@@ -6689,6 +6791,7 @@ requires-dist = [
     { name = "nest-asyncio", specifier = ">=1.6.0" },
     { name = "numpy", specifier = ">=1.20" },
     { name = "pandas", specifier = ">=2.0" },
+    { name = "pyamg", specifier = ">=5.0" },
     { name = "pytest", specifier = ">=7.0" },
     { name = "pywavelets", specifier = ">=1.1" },
     { name = "ruff", specifier = ">=0.1.0" },
