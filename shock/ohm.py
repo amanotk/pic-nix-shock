@@ -48,7 +48,69 @@ def idx(i, j, Nx, Ny=None):
     return i + Nx * j
 
 
-def assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4):
+def _periodic_second_difference_matrix(n):
+    """Return periodic 1D second-difference matrix (n x n)."""
+    D = sparse.lil_matrix((n, n))
+    D.setdiag(-2.0)
+    D.setdiag(1.0, k=-1)
+    D.setdiag(1.0, k=1)
+    D[0, n - 1] = 1.0
+    D[n - 1, 0] = 1.0
+    return D.tocsr()
+
+
+def _periodic_first_difference_matrix(n):
+    """Return periodic 1D first-difference matrix (n x n), no 1/(2Δ) factor."""
+    D = sparse.lil_matrix((n, n))
+    D.setdiag(-1.0, k=-1)
+    D.setdiag(1.0, k=1)
+    D[0, n - 1] = -1.0
+    D[n - 1, 0] = 1.0
+    return D.tocsr()
+
+
+def build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4):
+    """
+    Build Lambda-independent base matrices for Ohm solver.
+
+    Returns
+    -------
+    tuple[sparse.csr_matrix, sparse.csr_matrix]
+        (A_1_base, A_2_base), where:
+        - A_1 = A_1_base + block_diag(diag(Lambda), diag(Lambda))
+        - A_2 = A_2_base + diag(Lambda)
+    """
+    Ix = sparse.eye(Nx, format="csr")
+    Iy = sparse.eye(Ny, format="csr")
+
+    Dxx = _periodic_second_difference_matrix(Nx)
+    Dyy = _periodic_second_difference_matrix(Ny)
+    Dx1 = _periodic_first_difference_matrix(Nx)
+    Dy1 = _periodic_first_difference_matrix(Ny)
+
+    Lx = sparse.kron(Iy, Dxx, format="csr")
+    Ly = sparse.kron(Dyy, Ix, format="csr")
+    Cxy = sparse.kron(Dy1, Dx1, format="csr")
+
+    Axx_base = (-c2_dx2) * Ly
+    Ayy_base = (-c2_dx2) * Lx
+    Axy_base = c2_dx4 * Cxy
+
+    A_1_base = sparse.bmat([[Axx_base, Axy_base], [Axy_base, Ayy_base]], format="csr")
+    A_2_base = (-c2_dx2) * (Lx + Ly)
+
+    return A_1_base, A_2_base
+
+
+def build_ohm_bases_from_grid(Nx, Ny, c, delta):
+    """Build Lambda-independent base matrices from physical grid parameters."""
+    c2 = c * c
+    c2_dx2 = c2 / (delta * delta)
+    c2_dx4 = c2 / (4.0 * delta * delta)
+    return build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+
+
+def assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4, A_1_base=None):
     """
     Assemble sparse matrix for system 1 (Ex, Ey coupled).
 
@@ -72,123 +134,28 @@ def assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4):
         c²/Δ²
     c2_dx4 : float
         c²/(4Δ²)
+    A_1_base : sparse.csr_matrix, optional
+        Precomputed Lambda-independent base matrix for system 1.
 
     Returns
     -------
     sparse.csr_matrix
         Sparse matrix of shape (2*N, 2*N)
     """
-    N = Nx * Ny
-    nnz_estimate = 20 * N
-    data = np.zeros(nnz_estimate)
-    row = np.zeros(nnz_estimate, dtype=np.int32)
-    col = np.zeros(nnz_estimate, dtype=np.int32)
-    nnz = 0
-
+    if A_1_base is None:
+        A_1_base, _ = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+    else:
+        expected_shape = (2 * Nx * Ny, 2 * Nx * Ny)
+        if A_1_base.shape != expected_shape:
+            raise ValueError(
+                f"A_1_base shape {A_1_base.shape} must be {expected_shape} for Nx={Nx}, Ny={Ny}"
+            )
     Lambda_flat = Lambda.flatten(order="C")
-
-    for j in range(Ny):
-        for i in range(Nx):
-            k = idx(i, j, Nx)
-
-            k_ym = idx(i, (j - 1) % Ny, Nx)
-            k_yp = idx(i, (j + 1) % Ny, Nx)
-            k_xm = idx((i - 1) % Nx, j, Nx)
-            k_xp = idx((i + 1) % Nx, j, Nx)
-
-            lambda_val = Lambda_flat[k]
-
-            row[nnz] = k
-            col[nnz] = k
-            data[nnz] = lambda_val + 2 * c2_dx2
-            nnz += 1
-
-            row[nnz] = k
-            col[nnz] = k_ym
-            data[nnz] = -c2_dx2
-            nnz += 1
-
-            row[nnz] = k
-            col[nnz] = k_yp
-            data[nnz] = -c2_dx2
-            nnz += 1
-
-            row[nnz] = k
-            col[nnz] = N + idx((i + 1) % Nx, (j + 1) % Ny, Nx)
-            data[nnz] = c2_dx4
-            nnz += 1
-
-            row[nnz] = k
-            col[nnz] = N + idx((i + 1) % Nx, (j - 1) % Ny, Nx)
-            data[nnz] = -c2_dx4
-            nnz += 1
-
-            row[nnz] = k
-            col[nnz] = N + idx((i - 1) % Nx, (j + 1) % Ny, Nx)
-            data[nnz] = -c2_dx4
-            nnz += 1
-
-            row[nnz] = k
-            col[nnz] = N + idx((i - 1) % Nx, (j - 1) % Ny, Nx)
-            data[nnz] = c2_dx4
-            nnz += 1
-
-    for j in range(Ny):
-        for i in range(Nx):
-            k = idx(i, j, Nx)
-            k_ym = idx(i, (j - 1) % Ny, Nx)
-            k_yp = idx(i, (j + 1) % Ny, Nx)
-            k_xm = idx((i - 1) % Nx, j, Nx)
-            k_xp = idx((i + 1) % Nx, j, Nx)
-
-            lambda_val = Lambda_flat[k]
-
-            row[nnz] = N + k
-            col[nnz] = N + k
-            data[nnz] = lambda_val + 2 * c2_dx2
-            nnz += 1
-
-            row[nnz] = N + k
-            col[nnz] = N + k_xm
-            data[nnz] = -c2_dx2
-            nnz += 1
-
-            row[nnz] = N + k
-            col[nnz] = N + k_xp
-            data[nnz] = -c2_dx2
-            nnz += 1
-
-            row[nnz] = N + k
-            col[nnz] = idx((i + 1) % Nx, (j + 1) % Ny, Nx)
-            data[nnz] = c2_dx4
-            nnz += 1
-
-            row[nnz] = N + k
-            col[nnz] = idx((i + 1) % Nx, (j - 1) % Ny, Nx)
-            data[nnz] = -c2_dx4
-            nnz += 1
-
-            row[nnz] = N + k
-            col[nnz] = idx((i - 1) % Nx, (j + 1) % Ny, Nx)
-            data[nnz] = -c2_dx4
-            nnz += 1
-
-            row[nnz] = N + k
-            col[nnz] = idx((i - 1) % Nx, (j - 1) % Ny, Nx)
-            data[nnz] = c2_dx4
-            nnz += 1
-
-    data = data[:nnz]
-    row = row[:nnz]
-    col = col[:nnz]
-
-    A = sparse.csr_matrix((data, (row, col)), shape=(2 * N, 2 * N))
-    A.eliminate_zeros()
-
-    return A
+    Lambda_block = sparse.diags(np.concatenate((Lambda_flat, Lambda_flat)), format="csr")
+    return A_1_base + Lambda_block
 
 
-def assemble_matrix_2(Nx, Ny, Lambda, c2_dx2):
+def assemble_matrix_2(Nx, Ny, Lambda, c2_dx2, A_2_base=None):
     """
     Assemble sparse matrix for system 2 (Ez decoupled).
 
@@ -208,68 +175,29 @@ def assemble_matrix_2(Nx, Ny, Lambda, c2_dx2):
         Lambda array of shape (Ny, Nx)
     c2_dx2 : float
         c²/Δ²
+    A_2_base : sparse.csr_matrix, optional
+        Precomputed Lambda-independent base matrix for system 2.
 
     Returns
     -------
     sparse.csr_matrix
         Sparse matrix of shape (N, N)
     """
-    N = Nx * Ny
-    nnz_estimate = 7 * N
-    data = np.zeros(nnz_estimate)
-    row = np.zeros(nnz_estimate, dtype=np.int32)
-    col = np.zeros(nnz_estimate, dtype=np.int32)
-    nnz = 0
-
+    if A_2_base is None:
+        c2_dx4 = 0.25 * c2_dx2
+        _, A_2_base = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+    else:
+        expected_shape = (Nx * Ny, Nx * Ny)
+        if A_2_base.shape != expected_shape:
+            raise ValueError(
+                f"A_2_base shape {A_2_base.shape} must be {expected_shape} for Nx={Nx}, Ny={Ny}"
+            )
     Lambda_flat = Lambda.flatten(order="C")
-
-    for j in range(Ny):
-        for i in range(Nx):
-            k = idx(i, j, Nx)
-
-            k_ym = idx(i, (j - 1) % Ny, Nx)
-            k_yp = idx(i, (j + 1) % Ny, Nx)
-            k_xm = idx((i - 1) % Nx, j, Nx)
-            k_xp = idx((i + 1) % Nx, j, Nx)
-
-            lambda_val = Lambda_flat[k]
-
-            row[nnz] = k
-            col[nnz] = k
-            data[nnz] = lambda_val + 4 * c2_dx2
-            nnz += 1
-
-            row[nnz] = k
-            col[nnz] = k_xm
-            data[nnz] = -c2_dx2
-            nnz += 1
-
-            row[nnz] = k
-            col[nnz] = k_xp
-            data[nnz] = -c2_dx2
-            nnz += 1
-
-            row[nnz] = k
-            col[nnz] = k_ym
-            data[nnz] = -c2_dx2
-            nnz += 1
-
-            row[nnz] = k
-            col[nnz] = k_yp
-            data[nnz] = -c2_dx2
-            nnz += 1
-
-    data = data[:nnz]
-    row = row[:nnz]
-    col = col[:nnz]
-
-    A = sparse.csr_matrix((data, (row, col)), shape=(N, N))
-    A.eliminate_zeros()
-
-    return A
+    Lambda_diag = sparse.diags(Lambda_flat, format="csr")
+    return A_2_base + Lambda_diag
 
 
-def solve_ohm_2d(Lambda, S, c, delta):
+def solve_ohm_2d(Lambda, S, c, delta, A_1_base=None, A_2_base=None):
     """
     Solve the 2D generalized Ohm's law.
 
@@ -286,6 +214,10 @@ def solve_ohm_2d(Lambda, S, c, delta):
         Speed of light
     delta : float
         Grid spacing Δ (assumes dx = dy = Δ)
+    A_1_base : sparse.csr_matrix, optional
+        Precomputed Lambda-independent base matrix for system 1.
+    A_2_base : sparse.csr_matrix, optional
+        Precomputed Lambda-independent base matrix for system 2.
 
     Returns
     -------
@@ -310,8 +242,26 @@ def solve_ohm_2d(Lambda, S, c, delta):
     c2_dx2 = c2 / (delta * delta)
     c2_dx4 = c2 / (4.0 * delta * delta)
 
-    A_1 = assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4)
-    A_2 = assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
+    if A_1_base is None or A_2_base is None:
+        built_A_1_base, built_A_2_base = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+        if A_1_base is None:
+            A_1_base = built_A_1_base
+        if A_2_base is None:
+            A_2_base = built_A_2_base
+
+    expected_shape_1 = (2 * Nx * Ny, 2 * Nx * Ny)
+    expected_shape_2 = (Nx * Ny, Nx * Ny)
+    if A_1_base.shape != expected_shape_1:
+        raise ValueError(
+            f"A_1_base shape {A_1_base.shape} must be {expected_shape_1} for Nx={Nx}, Ny={Ny}"
+        )
+    if A_2_base.shape != expected_shape_2:
+        raise ValueError(
+            f"A_2_base shape {A_2_base.shape} must be {expected_shape_2} for Nx={Nx}, Ny={Ny}"
+        )
+
+    A_1 = assemble_matrix_1(Nx, Ny, Lambda, c2_dx2, c2_dx4, A_1_base=A_1_base)
+    A_2 = assemble_matrix_2(Nx, Ny, Lambda, c2_dx2, A_2_base=A_2_base)
 
     S_1 = np.concatenate([S[..., 0].flatten(order="C"), S[..., 1].flatten(order="C")])
     S_2 = S[..., 2].flatten(order="C")

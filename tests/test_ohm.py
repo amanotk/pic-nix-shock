@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+from scipy import sparse
 
 from shock import ohm
 
@@ -29,6 +30,48 @@ def test_solve_ohm_2d_shape_validation():
 
     with pytest.raises(ValueError, match="must match Lambda shape"):
         ohm.solve_ohm_2d(Lambda, np.zeros((7, 8, 3)), c, delta)
+
+
+def test_solve_ohm_2d_with_precomputed_bases_matches_default():
+    """Test optional base-matrix injection path matches default solver path."""
+    Nx, Ny = 8, 8
+    c = 1.0
+    delta = 1.0
+
+    x = np.arange(Nx)
+    y = np.arange(Ny)
+    xx = np.broadcast_to(x, (Ny, Nx))
+    yy = np.broadcast_to(y[:, None], (Ny, Nx))
+    Lambda = 0.5 + 0.1 * np.cos(2 * np.pi * xx / Nx) + 0.05 * np.sin(2 * np.pi * yy / Ny)
+
+    rng = np.random.default_rng(123)
+    S = rng.normal(size=(Ny, Nx, 3))
+
+    A_1_base, A_2_base = ohm.build_ohm_bases_from_grid(Nx, Ny, c, delta)
+
+    E_default = ohm.solve_ohm_2d(Lambda, S, c, delta)
+    E_with_bases = ohm.solve_ohm_2d(Lambda, S, c, delta, A_1_base=A_1_base, A_2_base=A_2_base)
+
+    np.testing.assert_allclose(E_with_bases, E_default, rtol=1e-11, atol=1e-12)
+
+
+def test_solve_ohm_2d_base_shape_validation():
+    """Test solve_ohm_2d rejects invalid precomputed base-matrix shapes."""
+    Nx, Ny = 8, 8
+    c = 1.0
+    delta = 1.0
+    N = Nx * Ny
+
+    Lambda = np.ones((Ny, Nx))
+    S = np.zeros((Ny, Nx, 3))
+
+    bad_A_1_base = sparse.eye(2 * N - 1, format="csr")
+    with pytest.raises(ValueError, match="A_1_base shape"):
+        ohm.solve_ohm_2d(Lambda, S, c, delta, A_1_base=bad_A_1_base)
+
+    bad_A_2_base = sparse.eye(N - 1, format="csr")
+    with pytest.raises(ValueError, match="A_2_base shape"):
+        ohm.solve_ohm_2d(Lambda, S, c, delta, A_2_base=bad_A_2_base)
 
 
 class TestFourierVerification:
