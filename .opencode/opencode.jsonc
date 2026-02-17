@@ -1,7 +1,4 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "snapshot": false,
-  "skills": {
-    "marimo-notebook": ".opencode/skills/marimo-notebook.md"
-  }
+  "snapshot": false
 }
