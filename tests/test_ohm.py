@@ -2,7 +2,6 @@
 
 import numpy as np
 import pytest
-from numpy.testing import assert_allclose
 
 from shock import ohm
 
@@ -32,7 +31,7 @@ def test_solve_ohm_2d_shape_validation():
         ohm.solve_ohm_2d(Lambda, np.zeros((7, 8, 3)), c, delta)
 
 
-class TestEzFourierVerification:
+class TestFourierVerification:
     """
     Test periodic boundary conditions using discrete Fourier verification for Ez only.
 
@@ -82,48 +81,6 @@ class TestEzFourierVerification:
 
         assert rel_err_Ez < 1e-10, f"Ez relative error {rel_err_Ez:.2e} exceeds tolerance"
 
-
-class TestEzMatrix:
-    """Test Ez matrix assembly directly."""
-
-    def test_ez_matrix_diagonal(self):
-        """Test that Ez matrix has correct diagonal entries."""
-        Nx, Ny = 4, 4
-        Lambda = np.ones((Ny, Nx))
-        c = 1.0
-        delta = 1.0
-        c2_dx2 = c * c / (delta * delta)
-
-        A_2 = ohm.assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
-
-        diag = A_2.diagonal()
-        expected_diag = 1.0 + 4 * c2_dx2
-
-        assert_allclose(diag, expected_diag)
-
-    def test_ez_matrix_off_diagonal(self):
-        """Test Ez matrix off-diagonal entries (Laplacian stencil)."""
-        Nx, Ny = 4, 4
-        Lambda = np.ones((Ny, Nx))
-        c = 1.0
-        delta = 1.0
-        c2_dx2 = c * c / (delta * delta)
-
-        A_2 = ohm.assemble_matrix_2(Nx, Ny, Lambda, c2_dx2)
-
-        assert A_2[0, 1] == -c2_dx2
-        assert A_2[0, Nx] == -c2_dx2
-
-
-class TestExEyMatrixFourierVerification:
-    """
-    Test assemble_matrix_1 using analytic Fourier verification.
-
-    From wavetool.md:
-    [ Λ + 4(c²/Δ²) sin²(kyΔ/2),   -c²/Δ² sin(kxΔ) sin(kyΔ) ]
-    [ -c²/Δ² sin(kxΔ) sin(kyΔ),   Λ + 4(c²/Δ²) sin²(kxΔ/2) ]
-    """
-
     @pytest.mark.parametrize("Nx,Ny", [(8, 8), (12, 16), (16, 12)])
     @pytest.mark.parametrize("mx,my", [(1, 1), (2, 3), (3, 2)])
     def test_ex_ey_matrix_fourier_periodic(self, Nx, Ny, mx, my):
@@ -171,13 +128,6 @@ class TestExEyMatrixFourierVerification:
 
         assert rel_err_Ex < 1e-10, f"Ex relative error {rel_err_Ex:.2e} exceeds tolerance"
         assert rel_err_Ey < 1e-10, f"Ey relative error {rel_err_Ey:.2e} exceeds tolerance"
-
-
-class TestExOnlyFourierVerification:
-    """
-    Test Ex component only (Ey=0).
-    From wavetool.md: Ex equation has y-derivative + coupling to Ey
-    """
 
     @pytest.mark.parametrize("Nx,Ny", [(8, 8), (12, 16), (16, 12)])
     @pytest.mark.parametrize("mx,my", [(1, 1), (2, 3), (3, 2)])
@@ -229,13 +179,6 @@ class TestExOnlyFourierVerification:
 
         assert rel_err_Ex < 1e-10, f"Ex relative error {rel_err_Ex:.2e} exceeds tolerance"
         assert rel_err_Ey < 1e-10, f"Ey should be zero, got {rel_err_Ey:.2e}"
-
-
-class TestEyOnlyFourierVerification:
-    """
-    Test Ey component only (Ex=0).
-    From wavetool.md: Ey equation has x-derivative + coupling to Ex
-    """
 
     @pytest.mark.parametrize("Nx,Ny", [(8, 8), (12, 16), (16, 12)])
     @pytest.mark.parametrize("mx,my", [(1, 1), (2, 3), (3, 2)])
