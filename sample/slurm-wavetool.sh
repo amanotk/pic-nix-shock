@@ -14,7 +14,29 @@
 
 export PICNIX_DIR=${HOME}/pic-nix
 
-. .shock.env
+if [[ -n "${SLURM_SUBMIT_DIR:-}" && -f "${SLURM_SUBMIT_DIR}/.shock.env" ]]; then
+    REPO_ROOT="${SLURM_SUBMIT_DIR}"
+else
+    SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    CANDIDATE_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+    if [[ -f "${CANDIDATE_ROOT}/.shock.env" ]]; then
+        REPO_ROOT="${CANDIDATE_ROOT}"
+    else
+        echo "ERROR: Could not locate repo root (.shock.env not found)." >&2
+        echo "       Submit from repo root or export SHOCK_ENV_FILE explicitly." >&2
+        exit 1
+    fi
+fi
+
+cd "${REPO_ROOT}" || exit 1
+
+. "${REPO_ROOT}/.shock.env"
+
+if command -v uv >/dev/null 2>&1; then
+    PYTHON_CMD=(uv run python)
+else
+    PYTHON_CMD=(python)
+fi
 
 PREFIX="field"
 RUNS=()
@@ -55,5 +77,5 @@ fi
 ulimit -n 4096
 for RUN in "${RUNS[@]}"; do
     TOML="${SHOCK_WORK_ROOT}/${RUN}/wavetool-config.toml"
-    python ./shock/wavetool.py -j analyze,plot --prefix "${PREFIX}" "${TOML}"
+    "${PYTHON_CMD[@]}" -m shock.wavetool -j analyze,plot --prefix "${PREFIX}" "${TOML}"
 done
