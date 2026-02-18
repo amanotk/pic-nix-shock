@@ -27,6 +27,7 @@ dependencies = [
     "ruff>=0.1.0",
     "pandas>=2.0",
     "marimo",
+    "plotly>=6.5.2",
 ]
 
 [project.optional-dependencies]
