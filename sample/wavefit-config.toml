@@ -20,13 +20,18 @@ wavefile = "wavefilter"
 rawfile = "wavetool"
 fitfile = "wavefit"
 
-# Gaussian window in physical units
+# Gaussian window radius for fit patch (physical units: c/omega_pe)
 sigma = 4.0
+
+# Spatial smoothing of E/B fields before fitting (physical units: c/omega_pe)
+# Set to 0 to disable smoothing.
+smooth_sigma = 0.5
 
 # Candidate selection from |B| envelope normalized by B0
 # envelope_threshold is an absolute threshold on |B_wave| / B0
 # B0 is computed from profile parameters (sigma, u0)
-# candidate_distance is the minimum candidate spacing in x/y units
+# candidate_distance is the minimum candidate spacing (physical units)
+# envelope_smooth_sigma smooths the envelope before peak detection (physical units)
 # max_candidates is used only when running with --debug
 max_candidates = 32
 envelope_smooth_sigma = 0.5

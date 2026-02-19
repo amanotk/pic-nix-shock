@@ -236,6 +236,12 @@ class WaveFilterPlotter(base.JobExecutor):
         yy = fileobj_wave["y"][i_wave, ...]
         X, Y = np.meshgrid(xx, yy)
 
+        if smooth_sigma > 0.0:
+            dx = float(xx[1] - xx[0])
+            smooth_sigma_grid = smooth_sigma / dx
+        else:
+            smooth_sigma_grid = 0.0
+
         if quantity == "wave":
             B_raw = fileobj_raw["B"][i_raw, ...] / B0
             BB = np.linalg.norm(B_raw, axis=-1)
@@ -246,9 +252,9 @@ class WaveFilterPlotter(base.JobExecutor):
             Ew_hp = fileobj_wave["E"][i_wave, ...]
             Bw_hp = fileobj_wave["B"][i_wave, ...]
 
-            Bf_hp = spatial_smooth(Bf_hp, smooth_sigma)
-            Ew_hp = spatial_smooth(Ew_hp, smooth_sigma)
-            Bw_hp = spatial_smooth(Bw_hp, smooth_sigma)
+            Bf_hp = spatial_smooth(Bf_hp, smooth_sigma_grid)
+            Ew_hp = spatial_smooth(Ew_hp, smooth_sigma_grid)
+            Bw_hp = spatial_smooth(Bw_hp, smooth_sigma_grid)
 
             B_absolute = BB
             B_envelope = np.linalg.norm(Bf_hp, axis=-1)
@@ -274,8 +280,8 @@ class WaveFilterPlotter(base.JobExecutor):
         elif quantity == "field":
             E = fileobj_wave["E"][i_wave, ...]
             B = fileobj_wave["B"][i_wave, ...]
-            E = spatial_smooth(E, smooth_sigma)
-            B = spatial_smooth(B, smooth_sigma)
+            E = spatial_smooth(E, smooth_sigma_grid)
+            B = spatial_smooth(B, smooth_sigma_grid)
             B_raw = fileobj_raw["B"][i_raw, ...] / B0
             Az = utils.calc_vector_potential2d(B_raw, dh)
             vars = [

@@ -338,8 +338,10 @@ def pick_candidate_points(xx, yy, envelope, sigma, options):
 
     env = np.array(envelope, copy=True)
     if smooth_sigma > 0.0:
-        env = ndimage.gaussian_filter1d(env, sigma=smooth_sigma, axis=0, mode="wrap")
-        env = ndimage.gaussian_filter1d(env, sigma=smooth_sigma, axis=1, mode="nearest")
+        dx = float(xx[1] - xx[0])
+        sigma_grid = smooth_sigma / dx
+        env = ndimage.gaussian_filter1d(env, sigma=sigma_grid, axis=0, mode="wrap")
+        env = ndimage.gaussian_filter1d(env, sigma=sigma_grid, axis=1, mode="nearest")
 
     ydy = np.median(np.diff(yy))
     sy = 1
@@ -483,6 +485,16 @@ class WaveFitAnalyzer(base.JobExecutor):
             fit_options.pop("max_candidates", None)
 
         sigma = float(self.options.get("sigma", 3.0))
+        smooth_sigma = float(self.options.get("smooth_sigma", 0.5))
+
+        if smooth_sigma > 0.0:
+            dx = float(xx[1] - xx[0])
+            sigma_grid = smooth_sigma / dx
+            E = ndimage.gaussian_filter1d(E, sigma=sigma_grid, axis=0, mode="wrap")
+            E = ndimage.gaussian_filter1d(E, sigma=sigma_grid, axis=1, mode="nearest")
+            B = ndimage.gaussian_filter1d(B, sigma=sigma_grid, axis=0, mode="wrap")
+            B = ndimage.gaussian_filter1d(B, sigma=sigma_grid, axis=1, mode="nearest")
+
         envelope = np.linalg.norm(B, axis=-1) / b0
         cand_ix, cand_iy, env_used = pick_candidate_points(xx, yy, envelope, sigma, fit_options)
 
