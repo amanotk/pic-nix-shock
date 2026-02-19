@@ -112,6 +112,20 @@ def fit_one_candidate(
     Xp, Yp = build_xy(xxp, yyp)
     Wpatch = build_window(Xp, Yp, x0, y0, sigma, Ly)
 
+    smooth_sigma = float(options.get("smooth_sigma", 0.5))
+    sample_factor = float(options.get("fit_sample_factor", 1.0))
+    skip = 1
+    if smooth_sigma > 0.0 and sample_factor > 0.0:
+        dx = float(xx[1] - xx[0])
+        sample_spacing = sample_factor * smooth_sigma
+        skip = max(1, int(round(sample_spacing / dx)))
+        if skip > 1:
+            Ep = Ep[::skip, ::skip]
+            Bp = Bp[::skip, ::skip]
+            Xp = Xp[::skip, ::skip]
+            Yp = Yp[::skip, ::skip]
+            Wpatch = Wpatch[::skip, ::skip]
+
     Ew_data = Ep * Wpatch[..., np.newaxis]
     Bw_data = Bp * Wpatch[..., np.newaxis]
 
@@ -119,6 +133,8 @@ def fit_one_candidate(
     if isinstance(B_background, np.ndarray) and B_background.shape[:2] == B.shape[:2]:
         if B_background.shape[-1] >= 3:
             Braw_patch = B_background[np.ix_(y_idx, x_idx, np.arange(3))]
+            if skip > 1:
+                Braw_patch = Braw_patch[::skip, ::skip]
 
     Je_patch = None
     Ji_patch = None
@@ -126,6 +142,9 @@ def fit_one_candidate(
         if J_background.shape[-1] >= 8:
             Je_patch = J_background[np.ix_(y_idx, x_idx, np.arange(4))]
             Ji_patch = J_background[np.ix_(y_idx, x_idx, np.arange(4, 8))]
+            if skip > 1:
+                Je_patch = Je_patch[::skip, ::skip]
+                Ji_patch = Ji_patch[::skip, ::skip]
 
     Bx, By, Bz = weighted_local_mean_vector(Braw_patch, Wpatch)
     vex, vey, vez, Ne = weighted_local_mean_velocity(Je_patch, Wpatch, qe)
